@@ -1,0 +1,162 @@
+## ---- warning=FALSE,message=FALSE----------------------------------------
+library(glmnet)
+library(e1071)
+library(tidyr)
+library(eqc)
+
+## ----genData-------------------------------------------------------------
+#Transform variables from Gaussian random variables
+g1 <- function(x){
+  pInfo <- length(x)
+  pw <- round(pInfo/5)
+  c(x[1:pw],
+    exp(x[(pw+1):(pw*2)])/2.161197,
+    log(abs(x[(pw*2+1):(pw*3)]))/1.110405,
+    x[(pw*3+1):(pw*4)]^2/1.413936,
+    abs(x[(pw*4+1):pInfo])^0.5/0.3490925 )
+}
+g2 <- function(x){
+  pInfo <- length(x)
+  pw <- round(pInfo/5)
+  c(x[1:pw],
+    exp(x[(pw+1):(pw*2)])/2.161197,
+    log(abs(x[(pw*2+1):(pw*3)]))/1.110405,
+    x[(pw*3+1):(pw*4)]^2/1.413936,
+    abs(x[(pw*4+1):pInfo])^0.5/0.3490925 ) + rep(0.2,pInfo)
+}
+
+genData <- function(ntrain=100,ntest=2000,
+                    p=20,percentNoise=0,
+                    g1,g2){
+  pNoise <- ceiling(p*percentNoise)
+  pInfo <- p-pNoise
+  
+  #----Training Set-----#
+  xtrain <- matrix(rnorm(ntrain*p),ntrain,p)
+  ntrainc1 <- round(ntrain*0.5)  
+  xtrain[1:(ntrainc1),1:pInfo] <- t( apply(xtrain[1:(ntrainc1),1:pInfo],1,g1) )
+  xtrain[(ntrainc1+1):ntrain,1:pInfo] <- t( apply(xtrain[(ntrainc1+1):ntrain,1:pInfo],1,g2))
+  trainY <- rep(1:2, c(ntrainc1,ntrain-ntrainc1))
+  colnames(xtrain) <- paste("x",1:p,sep="")
+  
+  #----Testing Set-----#
+  xtest <- matrix(rnorm(ntest*p),ntest,p)
+  ntestc1 <- round(ntest*0.5)
+  xtest[1:(ntestc1),1:pInfo] <- t( apply(xtest[1:(ntestc1),1:pInfo],1,g1) )
+  xtest[(ntestc1+1):ntest,1:pInfo] <- t( apply(xtest[(ntestc1+1):ntest,1:pInfo],1,g2))
+  testY <- rep(1:2, c(ntestc1,ntest-ntestc1))
+  colnames(xtest) <- paste("x",1:p,sep="")
+  
+  fulldata <- list(train=xtrain,
+                   cl.train=trainY,
+                   test=xtest,
+                   cl.test=testY)
+  return(fulldata)
+}
+
+## ----simulation----------------------------------------------------------
+
+#Initial parameters
+R <- 3  #Replicates
+ntest<- 10000
+ntrain<- 100
+p <- 100
+percentNoise <- c(0,0.5,0.9)
+
+# Tuning setting
+nfolds <- 4
+ncpu <- 1
+thetaList <- matrix(rep(seq(0.02,0.98,0.02),p),ncol=p)
+lambda <- c(3,1,0.1,0.01,0.001,0.0001)
+cost <- 2^(0:4)
+gamma <- c(0.001, 0.01, 0.1, 1, 2)
+
+# Fix cv folds for tuning parameters
+set.seed(193)
+n1 <- round(ntrain*0.5)
+n2 <- ntrain-n1
+index1 <- sample(rep(1:nfolds,ceiling(n1/nfolds))[1:n1],size = n1,replace = FALSE)
+index2 <- sample(rep(1:nfolds,ceiling(n2/nfolds))[1:n2],size = n2,replace = FALSE)
+foldid <- c(index1,index2)
+testErr <- data.frame(QC=0,Ridge=0, EQCRidge=0, MC=0, RSVM=0,
+                      percentNoise=rep(c(0,0.5,0.9),each=R))
+
+cat("noiselevel:")
+for(noiselevel in 1:3){
+  cat(noiselevel,"")
+  for(i in 1:R){
+    # Generate data
+    fulldata <- genData(ntrain,ntest,
+                        p=p,percentNoise=percentNoise[noiselevel],
+                        g1,g2)
+    
+    train <- fulldata$train
+    test <- fulldata$test
+    cl.train <- fulldata$cl.train
+    cl.test <- fulldata$cl.test
+    
+    #---------Model Fitting--------------#
+    # Ridge
+    Ridge <- cv.glmnet(x = train,y = as.factor(cl.train),
+                       lambda=lambda,alpha=0,
+                       nfolds = nfolds,foldid=foldid,
+                       family = "binomial")
+    predRidge <- ifelse( predict(Ridge,newx = test,type = "response", s="lambda.1se")<0.5,1,2)
+    testErr$Ridge[R*(noiselevel-1)+i] <- mean(predRidge!=cl.test)
+    
+    # EQC/Ridge
+    EQCRidge <- eqcTrain(train,cl.train,
+                         thetaList=thetaList,
+                         method = "glmnet",
+                         alpha = 0,lambda = lambda,
+                         tuneControl = list(foldid=foldid,ncpu=ncpu),
+                         lower.limits=0, upper.limits=Inf)
+    predEQCRidge <- predict(EQCRidge,newdata = test,type = "class")[[1]]
+    testErr$EQCRidge[R*(noiselevel-1)+i] <-  mean(predEQCRidge!=cl.test)
+    
+    # Quantile-based classifier (QC)
+    QC <- eqcTrain(train,cl.train,
+                   thetaList=thetaList,
+                   method = "qc",
+                   tuneControl = list(foldid=foldid))
+    predQC <- predict(QC,newdata = test,type = "class")[[1]]
+    testErr$QC[R*(noiselevel-1)+i] <-  mean(predQC!=cl.test)
+    
+    
+    # Median-based classifier (MC)
+    MC <- eqcTrain(train,cl.train,
+                   thetaList=matrix(rep(0.5,p),nrow = 1),
+                   method = "qc")
+    predMC <- predict(MC,newdata = test,type = "class")[[1]]
+    testErr$MC[R*(noiselevel-1)+i] <-  mean(predMC!=cl.test)
+    
+    # RSVM
+    rsvmfitTune <- tune.svm(x = train,y = factor(cl.train,levels = c(1,2)),
+                            type="C-classification", gamma = gamma, cost = cost)
+    rsvmfit <- svm(x = train,y = factor(cl.train,levels = c(1,2)),
+                   type="C-classification",
+                   gamma=rsvmfitTune$best.parameters[1],cost=rsvmfitTune$best.parameters[2])
+    predrsvm <- predict(rsvmfit,newdata = test)
+    testErr$RSVM[R*(noiselevel-1)+i] <- mean(predrsvm!=factor(cl.test,levels = c(1,2)))
+  }
+}
+
+
+## ----relErr--------------------------------------------------------------
+testErr_reformat <- tidyr::gather(testErr,key = "method",value = "testError",-percentNoise)
+testErr_reformat$method <- ordered(testErr_reformat$method, levels=c("QC","Ridge","EQCRidge","MC","RSVM"))
+testErr_reformat$percentNoise <- factor(testErr_reformat$percentNoise)
+library(latex2exp) 
+levels(testErr_reformat$percentNoise) <-  TeX( c("$Noise = 0%$","$Noise = 50%$","$Noise = 90%$") )
+head(testErr_reformat)
+
+## ---- fig.cap = "Boxplots of Test Errors of each Method", fig.width=7,fig.height=3----
+library(ggplot2)
+ggplot(testErr_reformat, mapping=aes(x=method, y=testError)) +
+  geom_boxplot(outlier.alpha = 0.5) +
+  geom_hline(yintercept = 0,linetype="dashed") +
+  labs(x="Method",y="Relative error")+
+  theme(legend.position="top",text = element_text(size=15) )+
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  facet_grid(~percentNoise, labeller = label_parsed)
+

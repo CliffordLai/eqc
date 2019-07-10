@@ -1,0 +1,1313 @@
+---
+title: " When Bayes Error Rate can be Achieved by Multiple Quantile Classifier?"
+author: "Yuanhao"
+date: "`r Sys.Date()`"
+header-includes:
+   - \usepackage{bm}
+   - \usepackage{float}
+   - \usepackage{tikz}
+   - \usepackage{hyperref}
+   - \hypersetup{colorlinks=true,citecolor=blue,urlcolor=blue,linkcolor=blue}
+   - \geometry{margin=1in} 
+output: 
+ pdf_document: 
+   citation_package: natbib
+   fig_caption: yes
+   keep_tex: yes
+   number_sections: yes
+   toc: yes
+bibliography: EQCSep17.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(xtable)
+library(earth) #MARS
+library(ald) #Asymmetric Laplace distribution
+```
+
+```{r untilityFun, include=FALSE}
+# log-Odds function derived from the Bayes theorem
+bayes_logodds <- function(x,dClass1,dClass2){
+  p1 <- dClass1(x)
+  p2 <- dClass2(x)
+  bp <- p2/(p1+p2)
+  log(bp/(1-bp))
+}
+
+# Bayes error rate
+baye_error <- function(dClass1,dClass2,xmin,xmax){
+  integrate(f = function(x){
+    0.5*(dClass1(x)<dClass2(x))*dClass1(x) +
+      0.5*(dClass1(x)>dClass2(x))*dClass2(x)
+  },lower = xmin,upper = xmax)
+}
+
+# log-odds of class 2 from the QC with one quantile
+qcfun <- function(x,
+                   theta,
+                   qClass1,qClass2){
+  q1 <- qClass1(theta)
+  q2 <- qClass2(theta)
+  (x-q1)*(theta-(x<q1)) - (x-q2)*(theta-(x<q2))
+}
+
+# log-odds from the QC with multiple quantiles
+qcfunMultiple <- function(x,
+                   thetaVector,
+                   qClass1,qClass2){
+  ans <- numeric(length(x))
+  for(i in 1:length(thetaVector)){
+    ans <- ans+qcfun(x,thetaVector[i],qClass1,qClass2)
+  }
+  return(ans)
+}
+
+# Quantile transformation
+QXtrans <- function(x,q1,q2,theta){
+  (x-q1)*(theta-(x<q1)) - (x-q2)*(theta-(x<q2))
+}
+
+
+# Quantile classifier (the original package implementaion is quite slow)
+Quantileclassifer <- function(x,y,thetaList,xtest,ytest){
+  n <- length(y)/2
+  q1 <- quantile(x[1:n],thetaList)
+  q2 <- quantile(x[1:n+n],thetaList)
+  
+  err <- numeric(length(thetaList))
+  for(i in 1:length(thetaList)){
+    ytrainhat <- ifelse(QXtrans(x,q1[i],q2[i],thetaList[i])>0,2,1)
+    err[i] <- mean(ytrainhat!=y)
+  }
+  
+  idx <- which.min(err)
+  thetaC <- thetaList[idx]
+  ytesthat <- ifelse(QXtrans(xtest,q1[idx],q2[idx],thetaList[idx])>0,2,1)
+  testQCerr <- mean(ytesthat!=ytest)
+  testQCerrSD <- sd(ytesthat!=ytest)/sqrt(length(ytest))
+  
+  list(theta=thetaC,
+       trainError=err[idx],
+       testError=testQCerr,
+       testErrorSD=testQCerrSD)
+}
+```
+
+
+# Introduction
+
+Let an univariate observation $x$ from one of the two populations $P_1$ and $P_2$ 
+with prior probabilities $\pi_1$ and $\pi_2=1-\pi_1$ and
+let $y\in \{1,2\}$ be the population or class indicator.
+The two populations have cumulative distribution functions $F_1(x)$ and $F_2(x)$
+and nonzero derivatives $f_1(x)$ and $f_2(x)$ on the same domain.
+Thus the corresponding quantile functions $q_1(\theta)$ and $q_2(\theta)$ for $\theta \in (0,1)$ 
+are continous.
+We will use the words "population" and "class" interchangeably and 
+restrict the discussion within an univariate input.
+
+The quantile-based classifier (QC) proposed by \citet{Hennig2016} was shown to 
+achieve the Bayes error rate 
+under the assumption that the log-odds of class 2 conditioned on $x$, $g(x)=\log(\pi_2/\pi_1)+\log(f_2(x)/f_1(x))$,
+has an unique root $r_1$.
+In other words, the Bayes decision boundary is only a single point at $r_1$.
+Figure \ref{fig:exampleAssumption} shows one possibility of such
+log-odds functions.
+In particular, it includes the case of the logistic regression with 
+$\log(p_2/(1-p_2))=\beta_0+\beta_1 x$ where $p_2=Pr(y=2|x)$.
+
+```{r exampleAssumption,out.width = '70%', fig.align='center', fig.pos="H", fig.cap="Log-odds function that statistifies the assumption of having the Bayes error rate", echo=FALSE}
+set.seed(111)
+x <- seq(-5,5,0.01)
+y <- 1/(1+exp(-x))-0.3
+plot(x,y,ylab = "log-odds",type="l")
+abline(h=0,col="red",lty=2)
+```
+
+
+Here is an intuitive explanation of why the QC can achieve 
+the Bayes error rate under this assumption.
+For an univariate $x$, the population QC is given by,
+\begin{equation}
+\hat{y}={\cal G}(x \mid \theta) = \begin{cases}
+1, & \text{if}\ s(x \mid \theta)\le 0\\
+2, & \text{if}\ s(x \mid \theta)> 0
+\end{cases},
+\label{eq:binaryRuleUnivariate}
+\end{equation}
+where $\theta \in (0,1)$ and the discriminant function
+\begin{equation}
+s(x \mid \theta)=
+\rho_{\theta}(x- q_{1}(\theta)) - \rho_{\theta}(x- q_{2}(\theta))
+,
+\label{eq:decisionBoundUnivariate}
+\end{equation}
+$q_{k}({\theta})$ is the $\theta$-quantile of $P_{k}$, $k=1,2$, and
+$\rho_\theta(u)=u(\theta-\text{I}_{\{u<0\}})$.
+
+The figure below shows the discriminant function $s(x \mid \theta)$ is 
+a piecewise linear function,
+which intersects with the x-axis at
+\[
+x_0(\theta)=\theta q_1(\theta) + (1-\theta) q_2(\theta).
+\]
+
+\begin{figure}[H]
+\begin{center}
+\tikzset{every picture/.style={line width=0.75pt}} %set default line width to 0.75pt
+\begin{tikzpicture}[x=0.75pt,y=0.75pt,yscale=-1,xscale=1]
+%uncomment if require: \path (0,150); %set diagram left start at 0, and has height of 150
+
+\draw  [dash pattern={on 0.84pt off 2.51pt}]  (131.87,71.43) -- (131.87,126.02) ;
+\draw    (43.36,71.97) -- (326.91,71.97) ;
+\draw   (317.5,67.27) -- (328.31,72.05) -- (317.5,76.83) ;
+\draw  [dash pattern={on 0.84pt off 2.51pt}]  (233.69,25.71) -- (233.69,67) ;
+\draw    (131.87,67) -- (131.87,71.43) ;
+\draw    (233.69,67) -- (233.69,71.43) ;
+\draw    (133.43,126.02) -- (233.69,25.71) ;
+\draw    (233.69,25.71) -- (327.69,25.71) ;
+\draw    (39.44,126.02) -- (133.43,126.02) ;
+
+\draw   (332.39,127.6) .. controls (337.06,127.6) and (339.39,125.27) .. (339.39,120.6) -- (339.39,87.85) .. controls (339.39,81.18) and (341.72,77.85) .. (346.39,77.85) .. controls (341.72,77.85) and (339.39,74.52) .. (339.39,67.85)(339.39,70.85) -- (339.39,35.11) .. controls (339.39,30.44) and (337.06,28.11) .. (332.39,28.11) ;
+
+\draw (133.43,81.02) node [scale=0.9]  {$q_{1}( \theta )$};
+\draw (237.61,81.02) node [scale=0.9]  {$q_{2}( \theta )$};
+\draw (318.77,81.8) node   {$x$};
+\draw (96.74,138.55) node [scale=0.9]  {$-[ q_{2}( \theta ) - q_{1}( \theta )]( 1-\theta )$};
+\draw (283.34,12.57) node [scale=0.9]  {$[q_{2}( \theta ) - q_{1}( \theta )] \theta $};
+\draw (393.03,79.02) node [scale=0.9]  {$q_{2}( \theta ) - q_{1}( \theta )$};
+\end{tikzpicture}
+\end{center}
+\caption{Quantile-based transformation when $q_{1}( \theta ) < q_{2}( \theta )$.}
+\label{fig:Qtransform}
+\end{figure}
+
+Since $x_0(\theta)$ is a continous function of $\theta \in (0,1)$ which can
+attain all values of the domain of $x$,
+then $\exists \theta_0 \in (0,1)$, s.t., $x_0(\theta_0)=r_1$
+and hence the Bayes error rate can be achieved.
+It also implies that $r_1$ lies between $q_1(\theta_0)$ and $q_2(\theta_0)$. 
+
+Although the assumption of having the log-odds of class 2 
+$g(x)=\log(\pi_2/\pi_1)+\log(f_2(x)/f_1(x))$
+had a unique root is more general than a linear discriminant function as used in
+the logistic regression,
+it is still restrictive as $g(x)$ can have more than one root.
+For example, if $P_1 \sim N(0,1)$ and $P_2 \sim N(0,2)$,
+then the $g(x)$ is a quadratic function, which has two roots.
+
+Is there a way of extending the QC to achieve the Bayes error rate in case 
+that $g(x)$ have mutiple roots?
+In this paper, we investigate the possibility of such extensions
+and propose the multiple quantile classifier that 
+uses multiple quantiles for each variable instead of 
+a signle quantile used by the original QC.
+By incorporating multiple quantiles,
+we proved that the Bayes error rate can be achieved 
+by using $M$ quantiles if the log-odds function
+has $M$ roots.
+In Section \ref{sec:relation2MARS}, 
+we reveal the relationship between QC and 
+multivariate adaptive regression splines (MARS)
+\citep{friedman1991,tibs2009}.
+We show that the multiple quantile classifier
+is a restricted MARS
+and is specially for classification only.
+We can then use the stagewise approach of MARS to 
+extend and implement the multiple quantile classifier and
+the resulting approach may be named as
+multivariate adaptive quantile classificatoin splines (MAQCS).
+
+# Log-Odds from Baye's Theorem {#sec:logOddsExample}
+
+By the Bayes's theorem, we have the (conditional) log-odds of class 2 as a function of $x$,
+\[
+g(x)=\log(\pi_2/\pi_1)+\log(f_2(x)/f_1(x)).
+\]
+Then the optimal strategy regarding minimizing the classfication error is
+to predict $y=2$ whenever $g(x)>0$.
+Thus, the **key** of whether a classifier can achieve the Bayes error rate is whether 
+their approximated log-odds can have the same signs or roots as 
+the log-odds function derived from the Bayes's theorem.
+
+The logistic regression assumes that this log-odds of class 2
+is a linear function of $x$
+and the optimality of the QC only requires it to have a unique root.
+However, they are still restrictive as $g(x)$ can have multiple roots.
+
+In the remain of this section, we will show various possibilities of $g(x)$
+when comparing different distributions.
+Without loss of generality, 
+we restrict the priors to be equal, $\pi_1=\pi_2=0.5$.
+
+## Case 1: Beta vs Beta with one root
+
+When $P_1 \sim \text{Beta}(4,3)$ and $P_2 \sim \text{Beta}(1.5,4)$,
+we show their density functions and the log-odds function in Figure \ref{fig:BayesCase1}.
+The log-odds function has only one root $r_1=0.3965228$.
+
+```{r BayesCase1,out.height= '25%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Density functions and log-odds for Beta(4,3) and Beta(1.5,4)", echo=FALSE}
+xmin <- 0
+xmax <- 1
+dClass1 <- function(x){dbeta(x,4,3)}
+dClass2 <- function(x){dbeta(x,1.5,4)}
+
+par(mfrow=c(1,2))
+par(mar = c(4, 3, 3, 0.5))
+curve(dClass1,xmin,xmax,ylim=c(0,3),
+      main="Density Comparison",cex.main=0.9)
+curve(dClass2,xmin,xmax,add=TRUE,lty=2)
+legend("topleft",c("Class 1","Class 2"),lty=c(1,2))
+
+# Bayes error rate
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=0.9)
+abline(h=0,col="red",lty=2)
+par(mfrow=c(1,1))
+```
+
+```{r,include=FALSE}
+# Find roots
+uniroot(bayes_logodds,interval = c(xmin+0.01,xmax-0.01),
+        dClass1=dClass1,dClass2=dClass2)
+```
+
+
+## Case 2: Beta vs Beta with two roots
+When $P_1 \sim \text{Beta}(0.6,0.6)$ and $P_2 \sim \text{Beta}(2,3)$,
+we show their density functions and the log-odds function in Figure \ref{fig:BayesCase2}.
+The log-odds function has two roots $r_1=0.1102811$ and $r_2=0.6962784$.
+
+```{r BayesCase2,out.height= '25%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Density functions and log-odds for Beta(0.6,0.6) and Beta(2,3)", echo=FALSE}
+xmin <- 0
+xmax <- 1
+dClass1 <- function(x){dbeta(x,0.6,0.6)}
+dClass2 <- function(x){dbeta(x,2,3)}
+
+par(mfrow=c(1,2))
+par(mar = c(4, 3, 3, 0.5))
+curve(dClass1,xmin,xmax,ylim=c(0,3),
+      main="Density Comparison",cex.main=0.9)
+curve(dClass2,xmin,xmax,add=TRUE,lty=2)
+legend("topleft",c("Class 1","Class 2"),lty=c(1,2))
+
+# Bayes error rate
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=0.9)
+abline(h=0,col="red",lty=2)
+par(mfrow=c(1,1))
+```
+
+```{r,include=FALSE}
+# Find roots
+uniroot(bayes_logodds,interval = c(0.01,0.3),
+        dClass1=dClass1,dClass2=dClass2)
+
+uniroot(bayes_logodds,interval = c(0.4,0.9),
+        dClass1=dClass1,dClass2=dClass2)
+```
+
+## Case 3: Normal vs Normal with two roots
+When $P_1 \sim \text{N}(0,1)$ and $P_2 \sim \text{N}(0,9)$,
+we show their density functions and the log-odds function in Figure \ref{fig:BayesCase3}.
+The log-odds function has two roots $r_1=-1.572213$ and $r_2=1.572213$.
+
+```{r BayesCase3,out.height= '25%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Density functions and log-odds for N(0,1) and N(0,9)", echo=FALSE}
+xmin <- -10
+xmax <- 10
+dClass1 <- function(x){dnorm(x,0,1)}
+dClass2 <- function(x){dnorm(x,0,3)}
+
+par(mfrow=c(1,2))
+par(mar = c(4, 3, 3, 0.5))
+curve(dClass1,xmin,xmax,ylim=c(0,1),
+      main="Density Comparison",cex.main=0.9)
+curve(dClass2,xmin,xmax,add=TRUE,lty=2)
+legend("topleft",c("Class 1","Class 2"),lty=c(1,2))
+
+# Bayes error rate
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=0.9)
+abline(h=0,col="red",lty=2)
+par(mfrow=c(1,1))
+```
+
+```{r,include=FALSE}
+# Find roots
+uniroot(bayes_logodds,interval = c(-3,0),
+        dClass1=dClass1,dClass2=dClass2)
+
+uniroot(bayes_logodds,interval = c(0,3),
+        dClass1=dClass1,dClass2=dClass2)
+```
+
+
+## Case 4: Laplace vs Normal with two roots
+
+When $P_1 \sim \text{N}(3,1)$ and $P_2 \sim \text{ALD}(0,0.5,0.2)$,
+we show their density functions and the log-odds function in Figure \ref{fig:BayesCase4}.
+The log-odds function has two roots $r_1=1.667663$ and $r_2=5.132321$.
+
+```{r BayesCase4,out.height= '25%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Density functions and log-odds for N(3,1) and ALD(0,0.5,0.2)", echo=FALSE}
+xmin <- -10
+xmax <- 10
+dClass1 <- function(x){dnorm(x,3,1)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.5,p=0.2)}
+
+par(mfrow=c(1,2))
+par(mar = c(4, 3, 3, 0.5))
+curve(dClass1,xmin,xmax,ylim=c(0,1),
+      main="Density Comparison",cex.main=0.9)
+curve(dClass2,xmin,xmax,add=TRUE,lty=2)
+legend("topleft",c("Class 1","Class 2"),lty=c(1,2))
+
+# Bayes error rate
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=0.9)
+abline(h=0,col="red",lty=2)
+par(mfrow=c(1,1))
+```
+
+```{r,include=FALSE}
+# Find roots
+uniroot(bayes_logodds,interval = c(0,3),
+        dClass1=dClass1,dClass2=dClass2)
+
+uniroot(bayes_logodds,interval = c(3,6),
+        dClass1=dClass1,dClass2=dClass2)
+```
+
+
+## Case 5: Laplace vs Normal with four roots
+When $P_1 \sim \text{N}(0.9,4)$ and $P_2 \sim \text{ALD}(0,0.55,0.4)$,
+the log-odds function has four roots
+as shown in Figure \ref{fig:BayesCase5}.
+They are $r_1=-5.682718$, $r_2=-1.24455$, $r_3=1.082073$ and $r_4=6.536126$.
+
+```{r BayesCase5,out.height= '25%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Density functions and log-odds for N(0.9,4) and ALD(0,0.55,0.4)", echo=FALSE}
+xmin <- -10
+xmax <- 10
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+
+par(mfrow=c(1,2))
+par(mar = c(4,3, 3, 0.5))
+curve(dClass1,xmin,xmax,ylim=c(0,1),
+      main="Density Comparison",cex.main=0.9)
+curve(dClass2,xmin,xmax,add=TRUE,lty=2)
+legend("topleft",c("Class 1","Class 2"),lty=c(1,2))
+
+# Bayes error rate
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=0.9)
+abline(h=0,col="red",lty=2)
+par(mfrow=c(1,1))
+```
+
+```{r,include=FALSE}
+# Find roots
+uniroot(bayes_logodds,interval = c(-10,-5),
+        dClass1=dClass1,dClass2=dClass2)
+
+uniroot(bayes_logodds,interval = c(-5,-0),
+        dClass1=dClass1,dClass2=dClass2)
+
+uniroot(bayes_logodds,interval = c(0,5),
+        dClass1=dClass1,dClass2=dClass2)
+
+uniroot(bayes_logodds,interval = c(5,10),
+        dClass1=dClass1,dClass2=dClass2)
+```
+
+# Discriminant Function of MQC
+
+The original QC defined in equation \eqref{eq:binaryRuleUnivariate} can only have one root in its discriminant function
+and hence lack of compatibility with Case 2 to 5 mentiond in Section \ref{sec:logOddsExample}.
+
+To overcome this shortcoming, we found that it is effective to
+aggregate the discriminant functions of the QC's from using diffierent quantiles.
+The resulting population multiple quantile classifer (MQC) with $M$ quantiles is defined by
+\begin{equation}
+\hat{y}={\cal G}(x \mid \bm{\theta}) = \begin{cases}
+1, & \text{if}\ s(x \mid \bm{\theta})\le 0\\
+2, & \text{if}\ s(x \mid \bm{\theta})> 0
+\end{cases},
+\label{eq:binaryRuleUnivariate-MQC}
+\end{equation}
+where $\bm{\theta} \in (0,1)^H$ and the discriminant function
+\begin{equation}
+s(x \mid \bm{\theta})=
+\sum_{m=1}^{M} \alpha_m [\rho_{\theta_m}(x- q_{1}(\theta_m)) - \rho_{\theta_m}(x- q_{2}(\theta_m))]
+,
+\label{eq:decisionBoundUnivariate-MQC}
+\end{equation}
+$\alpha_m\in \cal{R}$ for $m=1,\dotsc,M$, 
+$q_{k}({\theta})$ is the $\theta$-quantile of $P_{k}$, $k=1,2$, and
+$\rho_\theta(u)=u(\theta-\text{I}_{\{u<0\}})$.
+
+Our futher goal is to prove the following **Theorem**:
+Similar to the Bayes optimality of the QC when the log-odds function has a unique root,
+the MQC with $M$ quantiles can be shown to have the Bayes optimality when
+the log-odds function has $M$ roots.
+
+We use Case 5 in Section \ref{sec:logOddsExample} to 
+illustrate that the MQC with four quantiles
+can achieve the Bayes error rate
+in case that the log-odds function has 4 roots.
+
+## One quantile
+
+To help us (mannually) pick up quantiles for MQC,
+it is useful to see how the discriminant function of a single-quantile QC 
+can vary by the choice of quantiles.
+From Figure \ref{fig:singleCase5}, 
+as $\theta$ increases from 0 to 1, 
+the support of the non-constant component is moving to the right,
+and the direction of the non-constant component flips four times.
+They reflect that the QC has different class preferences in 
+different domains of $x$,
+which agrees with the true log-odds function.
+
+
+```{r singleCase5,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Disciminant functions of QC w.r.t. theta=0.001, 0.1,0.6,0.9", echo=FALSE}
+
+xmin <- -10
+xmax <- 10
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+qClass1 <- function(theta){qnorm(theta,0.9,2)}
+qClass2 <- function(theta){qALD(theta,mu = 0,sigma = 0.55,p=0.4)}
+
+par(mfrow=c(2,2))
+par(mar = c(4, 3, 3, 0.5))
+curve(qcfunMultiple(x,0.0008,qClass1,qClass2),xmin,xmax,
+      main="theta=0.0008",ylim=c(-1,1))
+abline(h=0,col="red",lty=2)
+
+curve(qcfunMultiple(x,0.105,qClass1,qClass2),xmin,xmax,
+      main="theta=0.105",ylim=c(-1,1))
+abline(h=0,col="red",lty=2)
+
+curve(qcfunMultiple(x,0.49,qClass1,qClass2),xmin,xmax,
+      main="theta=0.49",ylim=c(-1,1))
+abline(h=0,col="red",lty=2)
+
+curve(qcfunMultiple(x,0.995,qClass1,qClass2),xmin,xmax,
+      main="theta=0.995",ylim=c(-1,1))
+abline(h=0,col="red",lty=2)
+par(mfrow=c(1,1))
+
+```
+
+## Four quantiles
+One can play with the choice of $\bm{\theta}$ in order to have the same four roots
+$r_1=-5.682718$, $r_2=-1.24455$, $r_3=1.082073$ and $r_4=6.536126$
+given by the Bayes optimum.
+Figure \ref{fig:multipleCase5} show that the MQC with four quantiles at $\bm{\theta}=(0.0008, 0.105, 0.49, 0.995)$
+has four roots that are close to $(r_1,r_2,r_3,r_4)$.
+
+This example implies that it is still possible to achieve the Bayes error rate with MQC when
+the true log-odds function has multiple roots.
+
+```{r multipleCase5,out.height= '35%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="Disciminant functions of MQC with quantiles at theta=(0.0008, 0.105, 0.49, 0.995)", echo=FALSE}
+
+xmin <- -10
+xmax <- 10
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+qClass1 <- function(theta){qnorm(theta,0.9,2)}
+qClass2 <- function(theta){qALD(theta,mu = 0,sigma = 0.55,p=0.4)}
+
+par(mar = c(4, 3, 3, 0.5))
+curve(qcfunMultiple(x,c(0.0008, 0.105, 0.49, 0.995),qClass1,qClass2),xmin,xmax,
+      main="theta=0.0008,0.105,0.49,0.99")
+abline(h=0,col="red",lty=2)
+
+```
+
+# MQC as Restricted MARS {#sec:relation2MARS}
+Multivariate adaptive regression splines (MARS)
+\citet{friedman1991,tibs2009}
+is an adaptive procedure for regression.
+It uses a stepwise approach similar to CART to do automatic variable selection 
+and fitting.
+It can also be extended for classification with a proper link function 
+to incorporate the generalized linear models.
+
+We briefly introduce the representaion of MARS in the univariate case here.
+Details of the estimation can be found in \citet{friedman1991} and \citet{tibs2009}.
+
+MARS uses the following collection of piecewise linear basis functions
+\[
+{\cal C}=\{(x-t)_{+},(t-x)_{+},t=x_{1},\dotsc,x_{n}\},
+\]
+where "+" means the positive part.
+
+Then the MARS can be represented as a function
+\[
+f(x) = \beta_0+\sum_{m=1}^{M} \beta_m h_m(x),
+\]
+where $h_m(x)$ is a function in ${\cal C}$ or a product of two or more such functions.
+
+In contrast, the discriminant function of a single-quantile QC can be re-expressed as
+a linear combination of the piecewise linear basis functions used by MARS,
+\begin{eqnarray*}
+s(x\mid\theta) & = & \rho_{\theta}(x-q_{1}(\theta))-\rho_{\theta}(x-q_{2}(\theta))\\
+ & = & (x-q_{1}(\theta))(\theta-1_{\{x<q_{1}(\theta)\}})-(x-q_{2}(\theta))(\theta-1_{\{x<q_{2}(\theta)\}})\\
+ & = & \theta(x-q_{1}(\theta))_{+}+(1-\theta)(q_{1}(\theta)-x)_{+}-\theta(x-q_{2}(\theta))_{+}-(1-\theta)(q_{2}(\theta)-x)_{+}.
+\end{eqnarray*}
+Thus, the MQC with the discriminant function in equation \eqref{eq:decisionBoundUnivariate-MQC}
+can be viewed as a restricted MARS by aggregating some of its
+basis functions without products.
+
+One important adavantage of using the piecewise linear basis function for MARS is 
+their ability to operate locally and they are zero over part of their range,
+and hence the model can be built parsimoniously in high dimension.
+With the piecewise linear basis function used for MQC, 
+we reduce the number of candidate baisis functions from $2Np$ to $Np/2$ in the balanced case,
+and ensure the population optimalty in the univariate case by the Theorem we are going to prove.
+
+By following the implmentation of MARS in case of multivariate inputs,
+we can further extend MQC and call this new approach multivaraite addaptive quantile classification splines (MAQCS).
+
+# Simulation Study
+
+We access the performance of the linear logistic regression, 
+the polynominal logistic regression, MQC and MARS
+through the simulation study of the examples mentioned in Section \ref{sec:logOddsExample}.
+
+Training samples of size $n$ were simulated from two populations where 
+half belong to Class 1 and half belong to Class 2.
+To obtain an accurate estimate of the test error rate, 
+balanced test samples of size $10^6$ were used.
+
+For the MQC method, we mannually select $\bm{\theta}$ to optimize the result so there will be a bias.
+However, our goal here is to see how low the test error rate the MQC can achieve.
+
+Table \ref{tab:sim-set-up} shows the detailed set-ups of the simulation study in each scenario.
+The summary of test errors for all scenarios can be found in 
+Table \ref{tab:summary-sim} at the end of this section.
+
+\begin{table}[H]
+\protect\caption{Simulation Set-Up for each Scenario}
+\label{tab:sim-set-up}
+\begin{centering}
+\begin{tabular}{lcccc}
+\hline 
+Case & \#Roots & n & n-class1 & n-class2\\
+\hline 
+Beta(4,3) vs Beta(1.5,4) & 1 & 100 & 50 & 50\\
+Beta(0.6,0.6) vs Beta(2,3) & 2 & 100 & 50 & 50\\
+N(3,1) vs ALD(0,0.5,0.2) & 4 & 100 & 50 & 50 \\
+N(3,1) vs ALD(0,0.5,0.2) & 4 & 200 & 100 & 100 \\
+N(3,1) vs ALD(0,0.5,0.2) & 4 & 400 & 200 & 200 \\
+N(3,1) vs ALD(0,0.5,0.2) & 4 & 2000 & 200 & 200 \\
+\hline 
+\end{tabular}
+\par\end{centering}
+\end{table}
+
+
+
+```{r, echo=FALSE}
+summaryTestErr <- data.frame(case=c(rep("Beta(4,3) vs Beta(1.5,4)",1),
+                                    rep("Beta(0.6,0.6) vs Beta(2,3)",1),
+                                    rep("N(3,1) vs ALD(0,0.5,0.2)",4)),
+                             Roots=c(rep(1,1), rep(2,1), rep(4,4)),
+                             n = c(100,100,100,200,400,4000),
+                             Bayes="0",
+                             logistic="0", polylogisitc="0", QC="0", MQC="0", MARS="0", 
+                             stringsAsFactors = FALSE)
+```
+
+
+
+## Case 1: Beta vs Beta with one root and n=100
+
+```{r simStudy1,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="log-odds for Beta(4,3) and Beta(1.5,4) and the approximations, n=100", results='asis', echo=FALSE, cache=FALSE}
+dClass1 <- function(x){dbeta(x,4,3)}
+dClass2 <- function(x){dbeta(x,1.5,4)}
+qClass1 <- function(theta){qbeta(theta,4,3)}
+qClass2 <- function(theta){qbeta(theta,1.5,4)}
+rClass1 <- function(n){rbeta(n,4,3)}
+rClass2 <- function(n){rbeta(n,1.5,4)}
+xmin <- 0
+xmax <- 1
+
+set.seed(191)
+n <- 50
+ntest <- 500000
+x <- c(rClass1(n),rClass2(n) )
+y <- c(rep(1,n),rep(2,n))
+xtest <- c(rClass1(ntest),rClass2(ntest) )
+ytest <- c(rep(1,ntest),rep(2,ntest))
+testErr <- numeric(5)
+testErrSD <- numeric(5)
+
+# linear
+glm1 <- glm(factor(y)~x,family = binomial())
+pred1 <- predict(glm1,data.frame(x=xtest), type = "response")
+testErr[1] <- mean(ifelse(pred1>0.5,2,1)!=ytest)
+testErrSD[1] <- sd(ifelse(pred1>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# quadratic
+x2 <- x^2
+glm2 <- glm(factor(y)~x+x2,family = binomial())
+pred2 <- predict(glm2,data.frame(x=xtest,x2=xtest^2), type = "response")
+testErr[2] <- mean(ifelse(pred2>0.5,2,1)!=ytest)
+testErrSD[2] <- sd(ifelse(pred2>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# QC
+QCfit <- Quantileclassifer(x,y,thetaList=seq(1/n,1,1/n),xtest,ytest)
+testErr[3] <- QCfit$testError
+testErrSD[3] <- QCfit$testErrorSD
+
+# MQC
+thetaChoose <- c(0.5,0.6)
+q1 <- quantile(x[1:n],thetaChoose)
+q2 <- quantile(x[n+1:n],thetaChoose)
+Qx1 <- QXtrans(x,q1[1],q2[1],thetaChoose[1])
+Qx2 <- QXtrans(x,q1[2],q2[2],thetaChoose[2])
+Qxtest1 <-QXtrans(xtest,q1[1],q2[1],thetaChoose[1])
+Qxtest2 <-QXtrans(xtest,q1[2],q2[2],thetaChoose[2])
+
+glm3 <- glm(factor(y)~Qx1+Qx2,family = binomial())
+pred3 <- predict(glm3,data.frame(Qx1=Qxtest1,Qx2=Qxtest2), type = "response")
+testErr[4] <- mean(ifelse(pred3>0.5,2,1)!=ytest)
+testErrSD[4] <- sd(ifelse(pred3>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# MARS
+modelMars <- earth(factor(y)~x,degree = 2, glm=list(family=binomial))
+pred4 <- predict(modelMars,data.frame(x=xtest), type = "response")
+testErr[5] <- mean(ifelse(pred4>0.5,2,1)!=ytest)
+testErrSD[5] <- sd(ifelse(pred4>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# Visualize the estimated log-odds
+def.par <- par(no.readonly = TRUE)
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE),heights = c(4,1))
+par(mar = c(4,2,3,1))
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=1,ylab="",xlab="x")
+abline(h=0,col="black",lty=2)
+
+sx <- seq(xmin,xmax,0.05)
+points(sx, predict(glm1,data.frame(x=sx)),pch=19,col="blue",cex=0.7)
+points(sx, predict(glm2,data.frame(x=sx,x2=sx^2)),pch=3,col="blue",cex=0.7)
+points(sx, predict(glm3,data.frame(Qx1=QXtrans(sx,q1[1],q2[1],thetaChoose[1]),
+                                   Qx2=QXtrans(sx,q1[2],q2[2],thetaChoose[2]))),
+       pch=6,col="red",cex=0.7)
+points(sx, predict(modelMars,data.frame(x=sx)),pch=4,col="red",cex=0.7)
+
+legend("topright",
+       c("Linear logitisc","Quadratic logitisc",
+         "MQC(0.5,0.6)","MARS"),
+       pch=c(19,3,6,4),col=c("blue","blue","red","red"),cex=0.75,bg="white")
+par(mar = c(0,2,0,1))
+hist(xtest,main="",axes = FALSE,xlim=c(xmin,xmax))
+par(def.par)  #- reset to default
+
+print(xtable(data.frame(Method=c("Linear logitisc","Quadratic logitisc", paste0("QC(",QCfit$theta,")"),
+                                 "MQC(0.5,0.6)","MARS"),
+                        TestError=testErr,
+                        SD=testErrSD), 
+             digits = 4,
+             caption = paste0("Test Error Rate for Classification between Beta(4,3) and Beta(1.5,4), n=",2*n)),
+      include.rownames=FALSE,comment=FALSE, caption.placement = "top")
+
+summaryTestErr[1,5:9] <- paste0(round(testErr*10^4)/10^4,"(",round(testErrSD*10^4)/10^4,")")
+summaryTestErr[1,4] <- paste(round(berr$value*10^4)/10^4)
+```
+
+
+## Case 2: Beta vs Beta with two roots and n=100
+
+```{r simStudy2,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="log-odds for Beta(0.6,0.6) and Beta(2,3) and the approximations, n=100", results='asis', echo=FALSE, cache=FALSE}
+dClass1 <- function(x){dbeta(x,0.6,0.6)}
+dClass2 <- function(x){dbeta(x,2,3)}
+qClass1 <- function(theta){qbeta(theta,0.6,0.6)}
+qClass2 <- function(theta){qbeta(theta,2,3)}
+rClass1 <- function(n){rbeta(n,0.6,0.6)}
+rClass2 <- function(n){rbeta(n,2,3)}
+xmin <- 0
+xmax <- 1
+
+set.seed(191)
+n <- 50
+ntest <- 500000
+x <- c(rClass1(n),rClass2(n) )
+y <- c(rep(1,n),rep(2,n))
+xtest <- c(rClass1(ntest),rClass2(ntest) )
+ytest <- c(rep(1,ntest),rep(2,ntest))
+testErr <- numeric(5)
+testErrSD <- numeric(5)
+
+# linear
+glm1 <- glm(factor(y)~x,family = binomial())
+pred1 <- predict(glm1,data.frame(x=xtest), type = "response")
+testErr[1] <- mean(ifelse(pred1>0.5,2,1)!=ytest)
+testErrSD[1] <- sd(ifelse(pred1>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# quadratic
+x2 <- x^2
+glm2 <- glm(factor(y)~x+x2,family = binomial())
+pred2 <- predict(glm2,data.frame(x=xtest,x2=xtest^2), type = "response")
+testErr[2] <- mean(ifelse(pred2>0.5,2,1)!=ytest)
+testErrSD[2] <- sd(ifelse(pred2>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# QC
+QCfit <- Quantileclassifer(x,y,thetaList=seq(1/n,1,1/n),xtest,ytest)
+testErr[3] <- QCfit$testError
+testErrSD[3] <- QCfit$testErrorSD
+
+# MQC
+thetaChoose <- c(0.1,0.9)
+q1 <- quantile(x[1:n],thetaChoose)
+q2 <- quantile(x[n+1:n],thetaChoose)
+Qx1 <- QXtrans(x,q1[1],q2[1],thetaChoose[1])
+Qx2 <- QXtrans(x,q1[2],q2[2],thetaChoose[2])
+Qxtest1 <-QXtrans(xtest,q1[1],q2[1],thetaChoose[1])
+Qxtest2 <-QXtrans(xtest,q1[2],q2[2],thetaChoose[2])
+
+glm3 <- glm(factor(y)~Qx1+Qx2,family = binomial())
+pred3 <- predict(glm3,data.frame(Qx1=Qxtest1,Qx2=Qxtest2), type = "response")
+testErr[4] <- mean(ifelse(pred3>0.5,2,1)!=ytest)
+testErrSD[4] <- sd(ifelse(pred3>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# MARS
+modelMars <- earth(factor(y)~x,degree = 2, glm=list(family=binomial))
+pred4 <- predict(modelMars,data.frame(x=xtest), type = "response")
+testErr[5] <- mean(ifelse(pred4>0.5,2,1)!=ytest)
+testErrSD[5] <- sd(ifelse(pred4>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# Visualize the estimated log-odds
+def.par <- par(no.readonly = TRUE)
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE),heights = c(4,1))
+par(mar = c(4,2,3,1))
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=1,ylab="",xlab="x")
+abline(h=0,col="black",lty=2)
+
+sx <- seq(xmin,xmax,0.05)
+points(sx, predict(glm1,data.frame(x=sx)),pch=19,col="blue",cex=0.7)
+points(sx, predict(glm2,data.frame(x=sx,x2=sx^2)),pch=3,col="blue",cex=0.7)
+points(sx, predict(glm3,data.frame(Qx1=QXtrans(sx,q1[1],q2[1],thetaChoose[1]),
+                                   Qx2=QXtrans(sx,q1[2],q2[2],thetaChoose[2]))),
+       pch=6,col="red",cex=0.7)
+points(sx, predict(modelMars,data.frame(x=sx)),pch=4,col="red",cex=0.7)
+
+legend("topright",
+       c("Linear logitisc","Quadratic logitisc",
+         "MQC(0.1,0.9)","MARS"),
+       pch=c(19,3,6,4),col=c("blue","blue","red","red"),cex=0.75,bg="white")
+par(mar = c(0,2,0,1))
+hist(xtest,main="",axes = FALSE,xlim=c(xmin,xmax))
+par(def.par)  #- reset to default
+
+print(xtable(data.frame(Method=c("Linear logitisc","Quadratic logitisc", paste0("QC(",QCfit$theta,")"),
+                                 "MQC(0.1,0.9)","MARS"),
+                        TestError=testErr,
+                        SD=testErrSD), 
+             digits = 4,
+             caption = paste0("Test Error Rate for Classification between Beta(0.6,0.6) and Beta(2,3), n=",2*n)),
+      include.rownames=FALSE,comment=FALSE, caption.placement = "top")
+
+summaryTestErr[2,5:9] <- paste0(round(testErr*10^4)/10^4,"(",round(testErrSD*10^4)/10^4,")")
+summaryTestErr[2,4] <-paste(round(berr$value*10^4)/10^4)
+```
+
+## Case 5: Laplace vs Normal with four roots and n=100
+
+```{r simStudy3,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="log-odds for N(0.9,4) and ALD(0,0.55,0.4) and the approximations, n=100", results='asis', echo=FALSE, cache=FALSE}
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+qClass1 <- function(theta){qnorm(theta,0.9,2)}
+qClass2 <- function(theta){qALD(theta,mu = 0,sigma = 0.55,p=0.4)}
+rClass1 <- function(n){rnorm(n,0.9,2)}
+rClass2 <- function(n){rALD(n,mu = 0,sigma = 0.55,p=0.4)}
+
+xmin <- -10
+xmax <- 10
+
+set.seed(191)
+n <- 50
+ntest <- 500000
+x <- c(rClass1(n),rClass2(n) )
+y <- c(rep(1,n),rep(2,n))
+xtest <- c(rClass1(ntest),rClass2(ntest) )
+ytest <- c(rep(1,ntest),rep(2,ntest))
+testErr <- numeric(5)
+testErrSD <- numeric(5)
+
+# linear
+glm1 <- glm(factor(y)~x,family = binomial())
+pred1 <- predict(glm1,data.frame(x=xtest), type = "response")
+testErr[1] <- mean(ifelse(pred1>0.5,2,1)!=ytest)
+testErrSD[1] <- sd(ifelse(pred1>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# quadratic
+x2 <- x^2
+x3 <- x^3
+x4 <- x^4
+glm2 <- glm(factor(y)~x+x2+x3+x4,family = binomial())
+pred2 <- predict(glm2,data.frame(x=xtest,x2=xtest^2,x3=xtest^3,x4=xtest^4), type = "response")
+testErr[2] <- mean(ifelse(pred2>0.5,2,1)!=ytest)
+testErrSD[2] <- sd(ifelse(pred2>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# QC
+QCfit <- Quantileclassifer(x,y,thetaList=seq(1/n,1,1/n),xtest,ytest)
+testErr[3] <- QCfit$testError
+testErrSD[3] <- QCfit$testErrorSD
+
+# MQC
+thetaChoose <- c(0.1, 0.3, 0.7, 0.9)
+q1 <- quantile(x[1:n],thetaChoose)
+q2 <- quantile(x[n+1:n],thetaChoose)
+Qx1 <- QXtrans(x,q1[1],q2[1],thetaChoose[1])
+Qx2 <- QXtrans(x,q1[2],q2[2],thetaChoose[2])
+Qx3 <- QXtrans(x,q1[3],q2[3],thetaChoose[3])
+Qx4 <- QXtrans(x,q1[4],q2[4],thetaChoose[4])
+Qxtest1 <-QXtrans(xtest,q1[1],q2[1],thetaChoose[1])
+Qxtest2 <-QXtrans(xtest,q1[2],q2[2],thetaChoose[2])
+Qxtest3 <-QXtrans(xtest,q1[3],q2[3],thetaChoose[3])
+Qxtest4 <-QXtrans(xtest,q1[4],q2[4],thetaChoose[4])
+
+glm3 <- glm(factor(y)~Qx1+Qx2+Qx3+Qx4,family = binomial())
+pred3 <- predict(glm3,data.frame(Qx1=Qxtest1,Qx2=Qxtest2,
+                                 Qx3=Qxtest3,Qx4=Qxtest4), type = "response")
+testErr[4] <- mean(ifelse(pred3>0.5,2,1)!=ytest)
+testErrSD[4] <- sd(ifelse(pred3>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# MARS
+# Here we set df=1 because for higher df, MARS is just random guessing!
+# The performance could be improved greatly by increasing the training sample size
+modelMars <- earth(factor(y)~x,degree = 1, glm=list(family=binomial)) 
+pred4 <- predict(modelMars,data.frame(x=xtest), type = "response")
+testErr[5] <- mean(ifelse(pred4>0.5,2,1)!=ytest)
+testErrSD[5] <- sd(ifelse(pred4>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# Visualize the estimated log-odds
+def.par <- par(no.readonly = TRUE)
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE),heights = c(4,1))
+par(mar = c(4,2,3,1))
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=1,ylab="",xlab="x")
+abline(h=0,col="black",lty=2)
+
+sx <- seq(xmin,xmax,0.5)
+points(sx, predict(glm1,data.frame(x=sx)),pch=19,col="blue",cex=0.7)
+points(sx, predict(glm2,data.frame(x=sx,x2=sx^2,x3=sx^3,x4=sx^4)),pch=3,col="blue",cex=0.7)
+points(sx, predict(glm3,data.frame(Qx1=QXtrans(sx,q1[1],q2[1],thetaChoose[1]),
+                                   Qx2=QXtrans(sx,q1[2],q2[2],thetaChoose[2]),
+                                   Qx3=QXtrans(sx,q1[3],q2[3],thetaChoose[3]),
+                                   Qx4=QXtrans(sx,q1[4],q2[4],thetaChoose[4]))),pch=6,col="red",cex=0.7)
+points(sx, predict(modelMars,data.frame(x=sx)),pch=4,col="red",cex=0.7)
+
+legend("topright",
+       c("Linear logitisc","4th order logitisc",
+         "MQC(0.1, 0.3, 0.7, 0.9)","MARS"),
+       pch=c(19,3,6,4),col=c("blue","blue","red","red"),cex=0.75,bg="white")
+par(mar = c(0,2,0,1))
+hist(xtest,main="",axes = FALSE,xlim=c(xmin,xmax))
+par(def.par)  #- reset to default
+
+print(xtable(data.frame(Method=c("Linear logitisc","Quadratic logitisc", paste0("QC(",QCfit$theta,")"),
+                                 "MQC(0.1, 0.3, 0.7, 0.9)","MARS"),
+                        TestError=testErr,
+                        SD=testErrSD), 
+             digits = 4,
+             caption = paste0("Test Error Rate for Classification between N(0.9,4) and ALD(0,0.55,0.4), n=",2*n)),
+      include.rownames=FALSE,comment=FALSE, caption.placement = "top")
+
+summaryTestErr[3,5:9] <- paste0(round(testErr*10^4)/10^4,"(",round(testErrSD*10^4)/10^4,")")
+summaryTestErr[3,4] <-paste(round(berr$value*10^4)/10^4)
+```
+
+## Case 5: Laplace vs Normal with four roots and n=200
+
+```{r simStudy4,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="log-odds for N(0.9,4) and ALD(0,0.55,0.4) and the approximations, n=200", results='asis', echo=FALSE, cache=FALSE}
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+qClass1 <- function(theta){qnorm(theta,0.9,2)}
+qClass2 <- function(theta){qALD(theta,mu = 0,sigma = 0.55,p=0.4)}
+rClass1 <- function(n){rnorm(n,0.9,2)}
+rClass2 <- function(n){rALD(n,mu = 0,sigma = 0.55,p=0.4)}
+
+xmin <- -10
+xmax <- 10
+
+set.seed(191)
+n <- 100
+ntest <- 500000
+x <- c(rClass1(n),rClass2(n) )
+y <- c(rep(1,n),rep(2,n))
+xtest <- c(rClass1(ntest),rClass2(ntest) )
+ytest <- c(rep(1,ntest),rep(2,ntest))
+testErr <- numeric(5)
+testErrSD <- numeric(5)
+
+# linear
+glm1 <- glm(factor(y)~x,family = binomial())
+pred1 <- predict(glm1,data.frame(x=xtest), type = "response")
+testErr[1] <- mean(ifelse(pred1>0.5,2,1)!=ytest)
+testErrSD[1] <- sd(ifelse(pred1>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# quadratic
+x2 <- x^2
+x3 <- x^3
+x4 <- x^4
+glm2 <- glm(factor(y)~x+x2+x3+x4,family = binomial())
+pred2 <- predict(glm2,data.frame(x=xtest,x2=xtest^2,x3=xtest^3,x4=xtest^4), type = "response")
+testErr[2] <- mean(ifelse(pred2>0.5,2,1)!=ytest)
+testErrSD[2] <- sd(ifelse(pred2>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# QC
+QCfit <- Quantileclassifer(x,y,thetaList=seq(1/n,1,1/n),xtest,ytest)
+testErr[3] <- QCfit$testError
+testErrSD[3] <- QCfit$testErrorSD
+
+# MQC
+thetaChoose <- c(0.1, 0.3, 0.7, 0.9)
+q1 <- quantile(x[1:n],thetaChoose)
+q2 <- quantile(x[n+1:n],thetaChoose)
+Qx1 <- QXtrans(x,q1[1],q2[1],thetaChoose[1])
+Qx2 <- QXtrans(x,q1[2],q2[2],thetaChoose[2])
+Qx3 <- QXtrans(x,q1[3],q2[3],thetaChoose[3])
+Qx4 <- QXtrans(x,q1[4],q2[4],thetaChoose[4])
+Qxtest1 <-QXtrans(xtest,q1[1],q2[1],thetaChoose[1])
+Qxtest2 <-QXtrans(xtest,q1[2],q2[2],thetaChoose[2])
+Qxtest3 <-QXtrans(xtest,q1[3],q2[3],thetaChoose[3])
+Qxtest4 <-QXtrans(xtest,q1[4],q2[4],thetaChoose[4])
+
+glm3 <- glm(factor(y)~Qx1+Qx2+Qx3+Qx4,family = binomial())
+pred3 <- predict(glm3,data.frame(Qx1=Qxtest1,Qx2=Qxtest2,
+                                 Qx3=Qxtest3,Qx4=Qxtest4), type = "response")
+testErr[4] <- mean(ifelse(pred3>0.5,2,1)!=ytest)
+testErrSD[4] <- sd(ifelse(pred3>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# MARS
+# Here we set df=1 because for higher df, MARS is just random guessing!
+# The performance could be improved greatly by increasing the training sample size
+modelMars <- earth(factor(y)~x,degree = 1, glm=list(family=binomial)) 
+pred4 <- predict(modelMars,data.frame(x=xtest), type = "response")
+testErr[5] <- mean(ifelse(pred4>0.5,2,1)!=ytest)
+testErrSD[5] <- sd(ifelse(pred4>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# Visualize the estimated log-odds
+def.par <- par(no.readonly = TRUE)
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE),heights = c(4,1))
+par(mar = c(4,2,3,1))
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=1,ylab="",xlab="x")
+abline(h=0,col="black",lty=2)
+
+sx <- seq(xmin,xmax,0.5)
+points(sx, predict(glm1,data.frame(x=sx)),pch=19,col="blue",cex=0.7)
+points(sx, predict(glm2,data.frame(x=sx,x2=sx^2,x3=sx^3,x4=sx^4)),pch=3,col="blue",cex=0.7)
+points(sx, predict(glm3,data.frame(Qx1=QXtrans(sx,q1[1],q2[1],thetaChoose[1]),
+                                   Qx2=QXtrans(sx,q1[2],q2[2],thetaChoose[2]),
+                                   Qx3=QXtrans(sx,q1[3],q2[3],thetaChoose[3]),
+                                   Qx4=QXtrans(sx,q1[4],q2[4],thetaChoose[4]))),pch=6,col="red",cex=0.7)
+points(sx, predict(modelMars,data.frame(x=sx)),pch=4,col="red",cex=0.7)
+
+legend("topright",
+       c("Linear logitisc","4th order logitisc",
+         "MQC(0.1, 0.3, 0.7, 0.9)","MARS"),
+       pch=c(19,3,6,4),col=c("blue","blue","red","red"),cex=0.75,bg="white")
+par(mar = c(0,2,0,1))
+hist(xtest,main="",axes = FALSE,xlim=c(xmin,xmax))
+par(def.par)  #- reset to default
+
+print(xtable(data.frame(Method=c("Linear logitisc","Quadratic logitisc", paste0("QC(",QCfit$theta,")"),
+                                 "MQC(0.1, 0.3, 0.7, 0.9)","MARS"),
+                        TestError=testErr,
+                        SD=testErrSD), 
+             digits = 4,
+             caption = paste0("Test Error Rate for Classification between N(0.9,4) and ALD(0,0.55,0.4), n=",2*n)),
+      include.rownames=FALSE,comment=FALSE, caption.placement = "top")
+
+summaryTestErr[4,5:9] <- paste0(round(testErr*10^4)/10^4,"(",round(testErrSD*10^4)/10^4,")")
+summaryTestErr[4,4] <-paste(round(berr$value*10^4)/10^4)
+```
+
+## Case 5: Laplace vs Normal with four roots and n=400
+
+```{r simStudy5,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="log-odds for N(0.9,4) and ALD(0,0.55,0.4) and the approximations, n=400", results='asis', echo=FALSE, cache=FALSE}
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+qClass1 <- function(theta){qnorm(theta,0.9,2)}
+qClass2 <- function(theta){qALD(theta,mu = 0,sigma = 0.55,p=0.4)}
+rClass1 <- function(n){rnorm(n,0.9,2)}
+rClass2 <- function(n){rALD(n,mu = 0,sigma = 0.55,p=0.4)}
+
+xmin <- -10
+xmax <- 10
+
+set.seed(191)
+n <- 200
+ntest <- 500000
+x <- c(rClass1(n),rClass2(n) )
+y <- c(rep(1,n),rep(2,n))
+xtest <- c(rClass1(ntest),rClass2(ntest) )
+ytest <- c(rep(1,ntest),rep(2,ntest))
+testErr <- numeric(5)
+testErrSD <- numeric(5)
+
+# linear
+glm1 <- glm(factor(y)~x,family = binomial())
+pred1 <- predict(glm1,data.frame(x=xtest), type = "response")
+testErr[1] <- mean(ifelse(pred1>0.5,2,1)!=ytest)
+testErrSD[1] <- sd(ifelse(pred1>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# quadratic
+x2 <- x^2
+x3 <- x^3
+x4 <- x^4
+glm2 <- glm(factor(y)~x+x2+x3+x4,family = binomial())
+pred2 <- predict(glm2,data.frame(x=xtest,x2=xtest^2,x3=xtest^3,x4=xtest^4), type = "response")
+testErr[2] <- mean(ifelse(pred2>0.5,2,1)!=ytest)
+testErrSD[2] <- sd(ifelse(pred2>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# QC
+QCfit <- Quantileclassifer(x,y,thetaList=seq(1/n,1,1/n),xtest,ytest)
+testErr[3] <- QCfit$testError
+testErrSD[3] <- QCfit$testErrorSD
+
+# MQC
+thetaChoose <- c(0.1, 0.3, 0.7, 0.9)
+q1 <- quantile(x[1:n],thetaChoose)
+q2 <- quantile(x[n+1:n],thetaChoose)
+Qx1 <- QXtrans(x,q1[1],q2[1],thetaChoose[1])
+Qx2 <- QXtrans(x,q1[2],q2[2],thetaChoose[2])
+Qx3 <- QXtrans(x,q1[3],q2[3],thetaChoose[3])
+Qx4 <- QXtrans(x,q1[4],q2[4],thetaChoose[4])
+Qxtest1 <-QXtrans(xtest,q1[1],q2[1],thetaChoose[1])
+Qxtest2 <-QXtrans(xtest,q1[2],q2[2],thetaChoose[2])
+Qxtest3 <-QXtrans(xtest,q1[3],q2[3],thetaChoose[3])
+Qxtest4 <-QXtrans(xtest,q1[4],q2[4],thetaChoose[4])
+
+glm3 <- glm(factor(y)~Qx1+Qx2+Qx3+Qx4,family = binomial())
+pred3 <- predict(glm3,data.frame(Qx1=Qxtest1,Qx2=Qxtest2,
+                                 Qx3=Qxtest3,Qx4=Qxtest4), type = "response")
+testErr[4] <- mean(ifelse(pred3>0.5,2,1)!=ytest)
+testErrSD[4] <- sd(ifelse(pred3>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# MARS
+# Here we set df=1 because for higher df, MARS is just random guessing!
+# The performance could be improved greatly by increasing the training sample size
+modelMars <- earth(factor(y)~x,degree = 2, glm=list(family=binomial)) 
+pred4 <- predict(modelMars,data.frame(x=xtest), type = "response")
+testErr[5] <- mean(ifelse(pred4>0.5,2,1)!=ytest)
+testErrSD[5] <- sd(ifelse(pred4>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# Visualize the estimated log-odds
+def.par <- par(no.readonly = TRUE)
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE),heights = c(4,1))
+par(mar = c(4,2,3,1))
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=1,ylab="",xlab="x")
+abline(h=0,col="black",lty=2)
+
+sx <- seq(xmin,xmax,0.5)
+points(sx, predict(glm1,data.frame(x=sx)),pch=19,col="blue",cex=0.7)
+points(sx, predict(glm2,data.frame(x=sx,x2=sx^2,x3=sx^3,x4=sx^4)),pch=3,col="blue",cex=0.7)
+points(sx, predict(glm3,data.frame(Qx1=QXtrans(sx,q1[1],q2[1],thetaChoose[1]),
+                                   Qx2=QXtrans(sx,q1[2],q2[2],thetaChoose[2]),
+                                   Qx3=QXtrans(sx,q1[3],q2[3],thetaChoose[3]),
+                                   Qx4=QXtrans(sx,q1[4],q2[4],thetaChoose[4]))),pch=6,col="red",cex=0.7)
+points(sx, predict(modelMars,data.frame(x=sx)),pch=4,col="red",cex=0.7)
+
+legend("topright",
+       c("Linear logitisc","4th order logitisc",
+         "MQC(0.1, 0.3, 0.7, 0.9)","MARS"),
+       pch=c(19,3,6,4),col=c("blue","blue","red","red"),cex=0.75,bg="white")
+par(mar = c(0,2,0,1))
+hist(xtest,main="",axes = FALSE,xlim=c(xmin,xmax))
+par(def.par)  #- reset to default
+
+print(xtable(data.frame(Method=c("Linear logitisc","Quadratic logitisc", paste0("QC(",QCfit$theta,")"),
+                                 "MQC(0.1, 0.3, 0.7, 0.9)","MARS"),
+                        TestError=testErr,
+                        SD=testErrSD), 
+             digits = 4,
+             caption = paste0("Test Error Rate for Classification between N(0.9,4) and ALD(0,0.55,0.4), n=",2*n)),
+      include.rownames=FALSE,comment=FALSE, caption.placement = "top")
+
+summaryTestErr[5,5:9] <- paste0(round(testErr*10^4)/10^4,"(",round(testErrSD*10^4)/10^4,")")
+summaryTestErr[5,4] <-paste(round(berr$value*10^4)/10^4)
+```
+
+
+## Case 5: Laplace vs Normal with four roots and n=4000
+
+```{r simStudy6,out.height= '50%',out.width = '100%', fig.align='center', fig.pos="H", fig.cap="log-odds for N(0.9,4) and ALD(0,0.55,0.4) and the approximations, n=4000", results='asis', echo=FALSE, cache=FALSE}
+dClass1 <- function(x){dnorm(x,0.9,2)}
+dClass2 <- function(x){dALD(x,mu = 0,sigma = 0.55,p=0.4)}
+qClass1 <- function(theta){qnorm(theta,0.9,2)}
+qClass2 <- function(theta){qALD(theta,mu = 0,sigma = 0.55,p=0.4)}
+rClass1 <- function(n){rnorm(n,0.9,2)}
+rClass2 <- function(n){rALD(n,mu = 0,sigma = 0.55,p=0.4)}
+
+xmin <- -10
+xmax <- 10
+
+set.seed(191)
+n <- 2000
+ntest <- 500000
+x <- c(rClass1(n),rClass2(n) )
+y <- c(rep(1,n),rep(2,n))
+xtest <- c(rClass1(ntest),rClass2(ntest) )
+ytest <- c(rep(1,ntest),rep(2,ntest))
+testErr <- numeric(5)
+testErrSD <- numeric(5)
+
+# linear
+glm1 <- glm(factor(y)~x,family = binomial())
+pred1 <- predict(glm1,data.frame(x=xtest), type = "response")
+testErr[1] <- mean(ifelse(pred1>0.5,2,1)!=ytest)
+testErrSD[1] <- sd(ifelse(pred1>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# quadratic
+x2 <- x^2
+x3 <- x^3
+x4 <- x^4
+glm2 <- glm(factor(y)~x+x2+x3+x4,family = binomial())
+pred2 <- predict(glm2,data.frame(x=xtest,x2=xtest^2,x3=xtest^3,x4=xtest^4), type = "response")
+testErr[2] <- mean(ifelse(pred2>0.5,2,1)!=ytest)
+testErrSD[2] <- sd(ifelse(pred2>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# QC
+QCfit <- Quantileclassifer(x,y,thetaList=seq(1/n,1,1/n),xtest,ytest)
+testErr[3] <- QCfit$testError
+testErrSD[3] <- QCfit$testErrorSD
+
+# MQC
+thetaChoose <- c(0.001, 0.13, 0.63, 0.999)
+#thetaChoose <- c(0.1, 0.3, 0.7, 0.9)
+q1 <- quantile(x[1:n],thetaChoose)
+q2 <- quantile(x[n+1:n],thetaChoose)
+Qx1 <- QXtrans(x,q1[1],q2[1],thetaChoose[1])
+Qx2 <- QXtrans(x,q1[2],q2[2],thetaChoose[2])
+Qx3 <- QXtrans(x,q1[3],q2[3],thetaChoose[3])
+Qx4 <- QXtrans(x,q1[4],q2[4],thetaChoose[4])
+Qxtest1 <-QXtrans(xtest,q1[1],q2[1],thetaChoose[1])
+Qxtest2 <-QXtrans(xtest,q1[2],q2[2],thetaChoose[2])
+Qxtest3 <-QXtrans(xtest,q1[3],q2[3],thetaChoose[3])
+Qxtest4 <-QXtrans(xtest,q1[4],q2[4],thetaChoose[4])
+
+glm3 <- glm(factor(y)~Qx1+Qx2+Qx3+Qx4,family = binomial())
+pred3 <- predict(glm3,data.frame(Qx1=Qxtest1,Qx2=Qxtest2,
+                                 Qx3=Qxtest3,Qx4=Qxtest4), type = "response")
+testErr[4] <- mean(ifelse(pred3>0.5,2,1)!=ytest)
+testErrSD[4] <- sd(ifelse(pred3>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# MARS
+# Here we set df=1 because for higher df, MARS is just random guessing!
+# The performance could be improved greatly by increasing the training sample size
+modelMars <- earth(factor(y)~x,degree = 2, glm=list(family=binomial)) 
+pred4 <- predict(modelMars,data.frame(x=xtest), type = "response")
+testErr[5] <- mean(ifelse(pred4>0.5,2,1)!=ytest)
+testErrSD[5] <- sd(ifelse(pred4>0.5,2,1)!=ytest)/sqrt(2*ntest)
+
+# Visualize the estimated log-odds
+def.par <- par(no.readonly = TRUE)
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE),heights = c(4,1))
+par(mar = c(4,2,3,1))
+berr <- baye_error(dClass1,dClass2,xmin,xmax)
+curve(bayes_logodds(x,dClass1,dClass2),xmin,xmax,
+      main=paste0("Log-odds, Bayes Error = ",round(berr$value*1000)/1000),
+      cex.main=1,ylab="",xlab="x")
+abline(h=0,col="black",lty=2)
+
+sx <- seq(xmin,xmax,0.5)
+points(sx, predict(glm1,data.frame(x=sx)),pch=19,col="blue",cex=0.7)
+points(sx, predict(glm2,data.frame(x=sx,x2=sx^2,x3=sx^3,x4=sx^4)),pch=3,col="blue",cex=0.7)
+points(sx, predict(glm3,data.frame(Qx1=QXtrans(sx,q1[1],q2[1],thetaChoose[1]),
+                                   Qx2=QXtrans(sx,q1[2],q2[2],thetaChoose[2]),
+                                   Qx3=QXtrans(sx,q1[3],q2[3],thetaChoose[3]),
+                                   Qx4=QXtrans(sx,q1[4],q2[4],thetaChoose[4]))),pch=6,col="red",cex=0.7)
+points(sx, predict(modelMars,data.frame(x=sx)),pch=4,col="red",cex=0.7)
+
+legend("topright",
+       c("Linear logitisc","4th order logitisc",
+         "MQC(0.001, 0.13, 0.63, 0.999)","MARS"),
+       pch=c(19,3,6,4),col=c("blue","blue","red","red"),cex=0.75,bg="white")
+par(mar = c(0,2,0,1))
+hist(xtest,main="",axes = FALSE,xlim=c(xmin,xmax))
+par(def.par)  #- reset to default
+
+print(xtable(data.frame(Method=c("Linear logitisc","Quadratic logitisc", paste0("QC(",QCfit$theta,")"),
+                                 "MQC(0.001, 0.13, 0.63, 0.999)","MARS"),
+                        TestError=testErr,
+                        SD=testErrSD), 
+             digits = 4,
+             caption = paste0("Test Error Rate for Classification between N(0.9,4) and ALD(0,0.55,0.4), n=",2*n)),
+      include.rownames=FALSE,comment=FALSE, caption.placement = "top")
+
+summaryTestErr[6,5:9] <- paste0(round(testErr*10^4)/10^4,"(",round(testErrSD*10^4)/10^4,")")
+summaryTestErr[6,4] <- paste(round(berr$value*10^4)/10^4)
+```
+
+## Summary
+
+From Table \ref{tab:summary-sim}, we see that the MQC has performed much better than
+the linear logistic regression and the QC.
+This agrees with our theoretical discussion as the linear logistic regression and 
+the QC can only achieve optimality if 
+the true log-odds function has a unique root.
+
+The estimated log-odds function of MQC and MARS are 
+closed most of the time as seen from Figure \ref{fig:simStudy1} to \ref{fig:simStudy6}.
+This supports our argument that MQC is a restricted MARS.
+Meanwhile, MQC may outperform MARS with a small sample 
+in case of comparing N(3,1) and ALD(0,0.5,0.2).
+
+```{r,echo=FALSE,results='asis'}
+print(xtable(summaryTestErr[,-2],
+             label="tab:summary-sim",
+             align = c("lllcccccc"),
+             digits = 0,
+             caption = "Summary of the Simulation Study"),
+      include.rownames=FALSE,comment=FALSE, 
+      caption.placement = "top",table.placement="H",
+      size="\\fontsize{9pt}{10pt}\\selectfont")
+```
+
+
+# Further Work
+
+In conclusion, we now have two goals to achieve.
+
+1. Deduce the Theorem that the M-quantiles MQC can achieve the Bayes error rate if the log-odds function has $M$ roots in the univariate case.
+2. Implement the multivaraite adaptive quantile classification spline (MAQCS).
+
+Some questions may arise.
+
+1. One may be worried about the accuracy of the estimated in a small sample. 
+However, this might be not a big issue if they were viewd as a component of the basis functions.
+2. One may ask why we prefer MQC or MARS to the polynomial logistic regression if log-odds have multiple roots.
+The answer is that the polynomial basis functions would
+produce a nonzero product everywhere (non-parsimonious) in high-dimensional data
+and the resulting decision boundary can be overfitting to the training data.
+

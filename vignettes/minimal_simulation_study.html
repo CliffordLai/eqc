@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="author" content="Yuanhao" />
+
+<meta name="date" content="2019-07-09" />
+
+<title>Minimal Simulation Study of the Ensemble Quantile Classifier</title>
+
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(title);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' || rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#header {
+text-align: center;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Minimal Simulation Study of the Ensemble Quantile Classifier</h1>
+<h4 class="author">Yuanhao</h4>
+<h4 class="date">2019-07-09</h4>
+
+
+
+<p>This vignette introduces the functionality of the <code>eqc</code> package for fitting the ensemble quantile classifier (EQC). As an example, a simulation study is done to compare the performance with regard to the relative error towards the quantile-based classifier (QC) of the following methods.</p>
+<ul>
+<li>Ridge: Ridge logistic regression <span class="citation">(Park and Hastie 2007)</span>;</li>
+<li>EQC/Ridge: EQC fitted with the Ridge-type binomial loss;</li>
+<li>MC: Median-based classifier <span class="citation">(Hall, Titterington, and Xue 2009)</span>.</li>
+<li>RSVM: SVM with radial kernel <span class="citation">(Cortes and Vapnik 1995)</span>.</li>
+</ul>
+<p>The relative error is defined, <span class="math display">\[
+\frac{\text{Err}_c-\text{Err}_\text{quantile}}{(\text{Err}_c+\text{Err}_\text{quantile})/2},
+\]</span> where <span class="math inline">\(\text{Err}_c\)</span> and <span class="math inline">\(\text{Err}_\text{quantile}\)</span> are respectively the test error rate of the compared classifier and the quantile-based classifier. Tuning parameters were selected by minimizing the 5-fold cross validation errors, where the tuning set of <span class="math inline">\(\theta\)</span> is <span class="math inline">\(\{0.02,0.04,\dotsc,0.98\}\)</span>,and the tuning set of the penalty parameter of the ridge regression is <span class="math inline">\(\{3,1,0.1,0.01,0.001,0.0001\}\)</span>.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" title="1"><span class="kw">library</span>(glmnet)</a>
+<a class="sourceLine" id="cb1-2" title="2"><span class="kw">library</span>(e1071)</a>
+<a class="sourceLine" id="cb1-3" title="3"><span class="kw">library</span>(tidyr)</a>
+<a class="sourceLine" id="cb1-4" title="4"><span class="kw">library</span>(eqc)</a></code></pre></div>
+<div id="heterogenous-skewed-data-generation" class="section level2">
+<h2>Heterogenous Skewed Data Generation</h2>
+<p>We assume an observation is from either Class 1 or Class 2. We will investigate the heterogenous skewed scenario. For each observation, it contains equal number of variables with the same distributions as <span class="math inline">\(W\)</span>, <span class="math inline">\(\exp(W)\)</span>, <span class="math inline">\(\log(|W|)\)</span>, <span class="math inline">\(W^2\)</span> and <span class="math inline">\(|W|^{0.5}\)</span>, where <span class="math inline">\(W ∼ N(0, 1)\)</span>. In addition, each variable is further standarized to have a unit variance. We add a shift <span class="math inline">\(0.2\)</span> to half of the observations to produce observations from Class 2 and the remain will belong to Class 1.</p>
+<p>For each simulation, we control the training sample size <span class="math inline">\(ntrain\)</span> and the test sample size <span class="math inline">\(ntest\)</span>, the number of covariates <span class="math inline">\(p\)</span> and the percentage of covariates that are Gaussian noises <span class="math inline">\(percentNoise\)</span>. A general function to simulate such data is defined below.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" title="1"><span class="co">#Transform variables from Gaussian random variables</span></a>
+<a class="sourceLine" id="cb2-2" title="2">g1 &lt;-<span class="st"> </span><span class="cf">function</span>(x){</a>
+<a class="sourceLine" id="cb2-3" title="3">  pInfo &lt;-<span class="st"> </span><span class="kw">length</span>(x)</a>
+<a class="sourceLine" id="cb2-4" title="4">  pw &lt;-<span class="st"> </span><span class="kw">round</span>(pInfo<span class="op">/</span><span class="dv">5</span>)</a>
+<a class="sourceLine" id="cb2-5" title="5">  <span class="kw">c</span>(x[<span class="dv">1</span><span class="op">:</span>pw],</a>
+<a class="sourceLine" id="cb2-6" title="6">    <span class="kw">exp</span>(x[(pw<span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>(pw<span class="op">*</span><span class="dv">2</span>)])<span class="op">/</span><span class="fl">2.161197</span>,</a>
+<a class="sourceLine" id="cb2-7" title="7">    <span class="kw">log</span>(<span class="kw">abs</span>(x[(pw<span class="op">*</span><span class="dv">2</span><span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>(pw<span class="op">*</span><span class="dv">3</span>)]))<span class="op">/</span><span class="fl">1.110405</span>,</a>
+<a class="sourceLine" id="cb2-8" title="8">    x[(pw<span class="op">*</span><span class="dv">3</span><span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>(pw<span class="op">*</span><span class="dv">4</span>)]<span class="op">^</span><span class="dv">2</span><span class="op">/</span><span class="fl">1.413936</span>,</a>
+<a class="sourceLine" id="cb2-9" title="9">    <span class="kw">abs</span>(x[(pw<span class="op">*</span><span class="dv">4</span><span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>pInfo])<span class="op">^</span><span class="fl">0.5</span><span class="op">/</span><span class="fl">0.3490925</span> )</a>
+<a class="sourceLine" id="cb2-10" title="10">}</a>
+<a class="sourceLine" id="cb2-11" title="11">g2 &lt;-<span class="st"> </span><span class="cf">function</span>(x){</a>
+<a class="sourceLine" id="cb2-12" title="12">  pInfo &lt;-<span class="st"> </span><span class="kw">length</span>(x)</a>
+<a class="sourceLine" id="cb2-13" title="13">  pw &lt;-<span class="st"> </span><span class="kw">round</span>(pInfo<span class="op">/</span><span class="dv">5</span>)</a>
+<a class="sourceLine" id="cb2-14" title="14">  <span class="kw">c</span>(x[<span class="dv">1</span><span class="op">:</span>pw],</a>
+<a class="sourceLine" id="cb2-15" title="15">    <span class="kw">exp</span>(x[(pw<span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>(pw<span class="op">*</span><span class="dv">2</span>)])<span class="op">/</span><span class="fl">2.161197</span>,</a>
+<a class="sourceLine" id="cb2-16" title="16">    <span class="kw">log</span>(<span class="kw">abs</span>(x[(pw<span class="op">*</span><span class="dv">2</span><span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>(pw<span class="op">*</span><span class="dv">3</span>)]))<span class="op">/</span><span class="fl">1.110405</span>,</a>
+<a class="sourceLine" id="cb2-17" title="17">    x[(pw<span class="op">*</span><span class="dv">3</span><span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>(pw<span class="op">*</span><span class="dv">4</span>)]<span class="op">^</span><span class="dv">2</span><span class="op">/</span><span class="fl">1.413936</span>,</a>
+<a class="sourceLine" id="cb2-18" title="18">    <span class="kw">abs</span>(x[(pw<span class="op">*</span><span class="dv">4</span><span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>pInfo])<span class="op">^</span><span class="fl">0.5</span><span class="op">/</span><span class="fl">0.3490925</span> ) <span class="op">+</span><span class="st"> </span><span class="kw">rep</span>(<span class="fl">0.2</span>,pInfo)</a>
+<a class="sourceLine" id="cb2-19" title="19">}</a>
+<a class="sourceLine" id="cb2-20" title="20"></a>
+<a class="sourceLine" id="cb2-21" title="21">genData &lt;-<span class="st"> </span><span class="cf">function</span>(<span class="dt">ntrain=</span><span class="dv">100</span>,<span class="dt">ntest=</span><span class="dv">2000</span>,</a>
+<a class="sourceLine" id="cb2-22" title="22">                    <span class="dt">p=</span><span class="dv">20</span>,<span class="dt">percentNoise=</span><span class="dv">0</span>,</a>
+<a class="sourceLine" id="cb2-23" title="23">                    g1,g2){</a>
+<a class="sourceLine" id="cb2-24" title="24">  pNoise &lt;-<span class="st"> </span><span class="kw">ceiling</span>(p<span class="op">*</span>percentNoise)</a>
+<a class="sourceLine" id="cb2-25" title="25">  pInfo &lt;-<span class="st"> </span>p<span class="op">-</span>pNoise</a>
+<a class="sourceLine" id="cb2-26" title="26">  </a>
+<a class="sourceLine" id="cb2-27" title="27">  <span class="co">#----Training Set-----#</span></a>
+<a class="sourceLine" id="cb2-28" title="28">  xtrain &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="kw">rnorm</span>(ntrain<span class="op">*</span>p),ntrain,p)</a>
+<a class="sourceLine" id="cb2-29" title="29">  ntrainc1 &lt;-<span class="st"> </span><span class="kw">round</span>(ntrain<span class="op">*</span><span class="fl">0.5</span>)  </a>
+<a class="sourceLine" id="cb2-30" title="30">  xtrain[<span class="dv">1</span><span class="op">:</span>(ntrainc1),<span class="dv">1</span><span class="op">:</span>pInfo] &lt;-<span class="st"> </span><span class="kw">t</span>( <span class="kw">apply</span>(xtrain[<span class="dv">1</span><span class="op">:</span>(ntrainc1),<span class="dv">1</span><span class="op">:</span>pInfo],<span class="dv">1</span>,g1) )</a>
+<a class="sourceLine" id="cb2-31" title="31">  xtrain[(ntrainc1<span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>ntrain,<span class="dv">1</span><span class="op">:</span>pInfo] &lt;-<span class="st"> </span><span class="kw">t</span>( <span class="kw">apply</span>(xtrain[(ntrainc1<span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>ntrain,<span class="dv">1</span><span class="op">:</span>pInfo],<span class="dv">1</span>,g2))</a>
+<a class="sourceLine" id="cb2-32" title="32">  trainY &lt;-<span class="st"> </span><span class="kw">rep</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">2</span>, <span class="kw">c</span>(ntrainc1,ntrain<span class="op">-</span>ntrainc1))</a>
+<a class="sourceLine" id="cb2-33" title="33">  <span class="kw">colnames</span>(xtrain) &lt;-<span class="st"> </span><span class="kw">paste</span>(<span class="st">&quot;x&quot;</span>,<span class="dv">1</span><span class="op">:</span>p,<span class="dt">sep=</span><span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb2-34" title="34">  </a>
+<a class="sourceLine" id="cb2-35" title="35">  <span class="co">#----Testing Set-----#</span></a>
+<a class="sourceLine" id="cb2-36" title="36">  xtest &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="kw">rnorm</span>(ntest<span class="op">*</span>p),ntest,p)</a>
+<a class="sourceLine" id="cb2-37" title="37">  ntestc1 &lt;-<span class="st"> </span><span class="kw">round</span>(ntest<span class="op">*</span><span class="fl">0.5</span>)</a>
+<a class="sourceLine" id="cb2-38" title="38">  xtest[<span class="dv">1</span><span class="op">:</span>(ntestc1),<span class="dv">1</span><span class="op">:</span>pInfo] &lt;-<span class="st"> </span><span class="kw">t</span>( <span class="kw">apply</span>(xtest[<span class="dv">1</span><span class="op">:</span>(ntestc1),<span class="dv">1</span><span class="op">:</span>pInfo],<span class="dv">1</span>,g1) )</a>
+<a class="sourceLine" id="cb2-39" title="39">  xtest[(ntestc1<span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>ntest,<span class="dv">1</span><span class="op">:</span>pInfo] &lt;-<span class="st"> </span><span class="kw">t</span>( <span class="kw">apply</span>(xtest[(ntestc1<span class="op">+</span><span class="dv">1</span>)<span class="op">:</span>ntest,<span class="dv">1</span><span class="op">:</span>pInfo],<span class="dv">1</span>,g2))</a>
+<a class="sourceLine" id="cb2-40" title="40">  testY &lt;-<span class="st"> </span><span class="kw">rep</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">2</span>, <span class="kw">c</span>(ntestc1,ntest<span class="op">-</span>ntestc1))</a>
+<a class="sourceLine" id="cb2-41" title="41">  <span class="kw">colnames</span>(xtest) &lt;-<span class="st"> </span><span class="kw">paste</span>(<span class="st">&quot;x&quot;</span>,<span class="dv">1</span><span class="op">:</span>p,<span class="dt">sep=</span><span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb2-42" title="42">  </a>
+<a class="sourceLine" id="cb2-43" title="43">  fulldata &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">train=</span>xtrain,</a>
+<a class="sourceLine" id="cb2-44" title="44">                   <span class="dt">cl.train=</span>trainY,</a>
+<a class="sourceLine" id="cb2-45" title="45">                   <span class="dt">test=</span>xtest,</a>
+<a class="sourceLine" id="cb2-46" title="46">                   <span class="dt">cl.test=</span>testY)</a>
+<a class="sourceLine" id="cb2-47" title="47">  <span class="kw">return</span>(fulldata)</a>
+<a class="sourceLine" id="cb2-48" title="48">}</a></code></pre></div>
+</div>
+<div id="simulation" class="section level2">
+<h2>Simulation</h2>
+<p>We fix <span class="math inline">\(ntrain=100\)</span>, <span class="math inline">\(ntest=10000\)</span> and <span class="math inline">\(p=100\)</span>. We let the number of Gaussian noise <span class="math inline">\(percentNoise\)</span> be within <span class="math inline">\(\{0,0.5,0.9\}\)</span> We repeat simulations of each combination of settings for <span class="math inline">\(R=3\)</span> times.</p>
+<p>The following R script computes the test error rates for each method.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" title="1"><span class="co">#Initial parameters</span></a>
+<a class="sourceLine" id="cb3-2" title="2">R &lt;-<span class="st"> </span><span class="dv">3</span>  <span class="co">#Replicates</span></a>
+<a class="sourceLine" id="cb3-3" title="3">ntest&lt;-<span class="st"> </span><span class="dv">10000</span></a>
+<a class="sourceLine" id="cb3-4" title="4">ntrain&lt;-<span class="st"> </span><span class="dv">100</span></a>
+<a class="sourceLine" id="cb3-5" title="5">p &lt;-<span class="st"> </span><span class="dv">100</span></a>
+<a class="sourceLine" id="cb3-6" title="6">percentNoise &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">0</span>,<span class="fl">0.5</span>,<span class="fl">0.9</span>)</a>
+<a class="sourceLine" id="cb3-7" title="7"></a>
+<a class="sourceLine" id="cb3-8" title="8"><span class="co"># Tuning setting</span></a>
+<a class="sourceLine" id="cb3-9" title="9">nfolds &lt;-<span class="st"> </span><span class="dv">4</span></a>
+<a class="sourceLine" id="cb3-10" title="10">ncpu &lt;-<span class="st"> </span><span class="dv">1</span></a>
+<a class="sourceLine" id="cb3-11" title="11">thetaList &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="kw">rep</span>(<span class="kw">seq</span>(<span class="fl">0.02</span>,<span class="fl">0.98</span>,<span class="fl">0.02</span>),p),<span class="dt">ncol=</span>p)</a>
+<a class="sourceLine" id="cb3-12" title="12">lambda &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">3</span>,<span class="dv">1</span>,<span class="fl">0.1</span>,<span class="fl">0.01</span>,<span class="fl">0.001</span>,<span class="fl">0.0001</span>)</a>
+<a class="sourceLine" id="cb3-13" title="13">cost &lt;-<span class="st"> </span><span class="dv">2</span><span class="op">^</span>(<span class="dv">0</span><span class="op">:</span><span class="dv">4</span>)</a>
+<a class="sourceLine" id="cb3-14" title="14">gamma &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="fl">0.001</span>, <span class="fl">0.01</span>, <span class="fl">0.1</span>, <span class="dv">1</span>, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb3-15" title="15"></a>
+<a class="sourceLine" id="cb3-16" title="16"><span class="co"># Fix cv folds for tuning parameters</span></a>
+<a class="sourceLine" id="cb3-17" title="17"><span class="kw">set.seed</span>(<span class="dv">193</span>)</a>
+<a class="sourceLine" id="cb3-18" title="18">n1 &lt;-<span class="st"> </span><span class="kw">round</span>(ntrain<span class="op">*</span><span class="fl">0.5</span>)</a>
+<a class="sourceLine" id="cb3-19" title="19">n2 &lt;-<span class="st"> </span>ntrain<span class="op">-</span>n1</a>
+<a class="sourceLine" id="cb3-20" title="20">index1 &lt;-<span class="st"> </span><span class="kw">sample</span>(<span class="kw">rep</span>(<span class="dv">1</span><span class="op">:</span>nfolds,<span class="kw">ceiling</span>(n1<span class="op">/</span>nfolds))[<span class="dv">1</span><span class="op">:</span>n1],<span class="dt">size =</span> n1,<span class="dt">replace =</span> <span class="ot">FALSE</span>)</a>
+<a class="sourceLine" id="cb3-21" title="21">index2 &lt;-<span class="st"> </span><span class="kw">sample</span>(<span class="kw">rep</span>(<span class="dv">1</span><span class="op">:</span>nfolds,<span class="kw">ceiling</span>(n2<span class="op">/</span>nfolds))[<span class="dv">1</span><span class="op">:</span>n2],<span class="dt">size =</span> n2,<span class="dt">replace =</span> <span class="ot">FALSE</span>)</a>
+<a class="sourceLine" id="cb3-22" title="22">foldid &lt;-<span class="st"> </span><span class="kw">c</span>(index1,index2)</a>
+<a class="sourceLine" id="cb3-23" title="23">testErr &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">QC=</span><span class="dv">0</span>,<span class="dt">Ridge=</span><span class="dv">0</span>, <span class="dt">EQCRidge=</span><span class="dv">0</span>, <span class="dt">MC=</span><span class="dv">0</span>, <span class="dt">RSVM=</span><span class="dv">0</span>,</a>
+<a class="sourceLine" id="cb3-24" title="24">                      <span class="dt">percentNoise=</span><span class="kw">rep</span>(<span class="kw">c</span>(<span class="dv">0</span>,<span class="fl">0.5</span>,<span class="fl">0.9</span>),<span class="dt">each=</span>R))</a>
+<a class="sourceLine" id="cb3-25" title="25"></a>
+<a class="sourceLine" id="cb3-26" title="26"><span class="kw">cat</span>(<span class="st">&quot;noiselevel:&quot;</span>)</a></code></pre></div>
+<pre><code>## noiselevel:</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" title="1"><span class="cf">for</span>(noiselevel <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="dv">3</span>){</a>
+<a class="sourceLine" id="cb5-2" title="2">  <span class="kw">cat</span>(noiselevel,<span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb5-3" title="3">  <span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span>R){</a>
+<a class="sourceLine" id="cb5-4" title="4">    <span class="co"># Generate data</span></a>
+<a class="sourceLine" id="cb5-5" title="5">    fulldata &lt;-<span class="st"> </span><span class="kw">genData</span>(ntrain,ntest,</a>
+<a class="sourceLine" id="cb5-6" title="6">                        <span class="dt">p=</span>p,<span class="dt">percentNoise=</span>percentNoise[noiselevel],</a>
+<a class="sourceLine" id="cb5-7" title="7">                        g1,g2)</a>
+<a class="sourceLine" id="cb5-8" title="8">    </a>
+<a class="sourceLine" id="cb5-9" title="9">    train &lt;-<span class="st"> </span>fulldata<span class="op">$</span>train</a>
+<a class="sourceLine" id="cb5-10" title="10">    test &lt;-<span class="st"> </span>fulldata<span class="op">$</span>test</a>
+<a class="sourceLine" id="cb5-11" title="11">    cl.train &lt;-<span class="st"> </span>fulldata<span class="op">$</span>cl.train</a>
+<a class="sourceLine" id="cb5-12" title="12">    cl.test &lt;-<span class="st"> </span>fulldata<span class="op">$</span>cl.test</a>
+<a class="sourceLine" id="cb5-13" title="13">    </a>
+<a class="sourceLine" id="cb5-14" title="14">    <span class="co">#---------Model Fitting--------------#</span></a>
+<a class="sourceLine" id="cb5-15" title="15">    <span class="co"># Ridge</span></a>
+<a class="sourceLine" id="cb5-16" title="16">    Ridge &lt;-<span class="st"> </span><span class="kw">cv.glmnet</span>(<span class="dt">x =</span> train,<span class="dt">y =</span> <span class="kw">as.factor</span>(cl.train),</a>
+<a class="sourceLine" id="cb5-17" title="17">                       <span class="dt">lambda=</span>lambda,<span class="dt">alpha=</span><span class="dv">0</span>,</a>
+<a class="sourceLine" id="cb5-18" title="18">                       <span class="dt">nfolds =</span> nfolds,<span class="dt">foldid=</span>foldid,</a>
+<a class="sourceLine" id="cb5-19" title="19">                       <span class="dt">family =</span> <span class="st">&quot;binomial&quot;</span>)</a>
+<a class="sourceLine" id="cb5-20" title="20">    predRidge &lt;-<span class="st"> </span><span class="kw">ifelse</span>( <span class="kw">predict</span>(Ridge,<span class="dt">newx =</span> test,<span class="dt">type =</span> <span class="st">&quot;response&quot;</span>, <span class="dt">s=</span><span class="st">&quot;lambda.1se&quot;</span>)<span class="op">&lt;</span><span class="fl">0.5</span>,<span class="dv">1</span>,<span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb5-21" title="21">    testErr<span class="op">$</span>Ridge[R<span class="op">*</span>(noiselevel<span class="dv">-1</span>)<span class="op">+</span>i] &lt;-<span class="st"> </span><span class="kw">mean</span>(predRidge<span class="op">!=</span>cl.test)</a>
+<a class="sourceLine" id="cb5-22" title="22">    </a>
+<a class="sourceLine" id="cb5-23" title="23">    <span class="co"># EQC/Ridge</span></a>
+<a class="sourceLine" id="cb5-24" title="24">    EQCRidge &lt;-<span class="st"> </span><span class="kw">eqcTrain</span>(train,cl.train,</a>
+<a class="sourceLine" id="cb5-25" title="25">                         <span class="dt">thetaList=</span>thetaList,</a>
+<a class="sourceLine" id="cb5-26" title="26">                         <span class="dt">method =</span> <span class="st">&quot;glmnet&quot;</span>,</a>
+<a class="sourceLine" id="cb5-27" title="27">                         <span class="dt">alpha =</span> <span class="dv">0</span>,<span class="dt">lambda =</span> lambda,</a>
+<a class="sourceLine" id="cb5-28" title="28">                         <span class="dt">tuneControl =</span> <span class="kw">list</span>(<span class="dt">foldid=</span>foldid,<span class="dt">ncpu=</span>ncpu),</a>
+<a class="sourceLine" id="cb5-29" title="29">                         <span class="dt">lower.limits=</span><span class="dv">0</span>, <span class="dt">upper.limits=</span><span class="ot">Inf</span>)</a>
+<a class="sourceLine" id="cb5-30" title="30">    predEQCRidge &lt;-<span class="st"> </span><span class="kw">predict</span>(EQCRidge,<span class="dt">newdata =</span> test,<span class="dt">type =</span> <span class="st">&quot;class&quot;</span>)[[<span class="dv">1</span>]]</a>
+<a class="sourceLine" id="cb5-31" title="31">    testErr<span class="op">$</span>EQCRidge[R<span class="op">*</span>(noiselevel<span class="dv">-1</span>)<span class="op">+</span>i] &lt;-<span class="st">  </span><span class="kw">mean</span>(predEQCRidge<span class="op">!=</span>cl.test)</a>
+<a class="sourceLine" id="cb5-32" title="32">    </a>
+<a class="sourceLine" id="cb5-33" title="33">    <span class="co"># Quantile-based classifier (QC)</span></a>
+<a class="sourceLine" id="cb5-34" title="34">    QC &lt;-<span class="st"> </span><span class="kw">eqcTrain</span>(train,cl.train,</a>
+<a class="sourceLine" id="cb5-35" title="35">                   <span class="dt">thetaList=</span>thetaList,</a>
+<a class="sourceLine" id="cb5-36" title="36">                   <span class="dt">method =</span> <span class="st">&quot;qc&quot;</span>,</a>
+<a class="sourceLine" id="cb5-37" title="37">                   <span class="dt">tuneControl =</span> <span class="kw">list</span>(<span class="dt">foldid=</span>foldid))</a>
+<a class="sourceLine" id="cb5-38" title="38">    predQC &lt;-<span class="st"> </span><span class="kw">predict</span>(QC,<span class="dt">newdata =</span> test,<span class="dt">type =</span> <span class="st">&quot;class&quot;</span>)[[<span class="dv">1</span>]]</a>
+<a class="sourceLine" id="cb5-39" title="39">    testErr<span class="op">$</span>QC[R<span class="op">*</span>(noiselevel<span class="dv">-1</span>)<span class="op">+</span>i] &lt;-<span class="st">  </span><span class="kw">mean</span>(predQC<span class="op">!=</span>cl.test)</a>
+<a class="sourceLine" id="cb5-40" title="40">    </a>
+<a class="sourceLine" id="cb5-41" title="41">    </a>
+<a class="sourceLine" id="cb5-42" title="42">    <span class="co"># Median-based classifier (MC)</span></a>
+<a class="sourceLine" id="cb5-43" title="43">    MC &lt;-<span class="st"> </span><span class="kw">eqcTrain</span>(train,cl.train,</a>
+<a class="sourceLine" id="cb5-44" title="44">                   <span class="dt">thetaList=</span><span class="kw">matrix</span>(<span class="kw">rep</span>(<span class="fl">0.5</span>,p),<span class="dt">nrow =</span> <span class="dv">1</span>),</a>
+<a class="sourceLine" id="cb5-45" title="45">                   <span class="dt">method =</span> <span class="st">&quot;qc&quot;</span>)</a>
+<a class="sourceLine" id="cb5-46" title="46">    predMC &lt;-<span class="st"> </span><span class="kw">predict</span>(MC,<span class="dt">newdata =</span> test,<span class="dt">type =</span> <span class="st">&quot;class&quot;</span>)[[<span class="dv">1</span>]]</a>
+<a class="sourceLine" id="cb5-47" title="47">    testErr<span class="op">$</span>MC[R<span class="op">*</span>(noiselevel<span class="dv">-1</span>)<span class="op">+</span>i] &lt;-<span class="st">  </span><span class="kw">mean</span>(predMC<span class="op">!=</span>cl.test)</a>
+<a class="sourceLine" id="cb5-48" title="48">    </a>
+<a class="sourceLine" id="cb5-49" title="49">    <span class="co"># RSVM</span></a>
+<a class="sourceLine" id="cb5-50" title="50">    rsvmfitTune &lt;-<span class="st"> </span><span class="kw">tune.svm</span>(<span class="dt">x =</span> train,<span class="dt">y =</span> <span class="kw">factor</span>(cl.train,<span class="dt">levels =</span> <span class="kw">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)),</a>
+<a class="sourceLine" id="cb5-51" title="51">                            <span class="dt">type=</span><span class="st">&quot;C-classification&quot;</span>, <span class="dt">gamma =</span> gamma, <span class="dt">cost =</span> cost)</a>
+<a class="sourceLine" id="cb5-52" title="52">    rsvmfit &lt;-<span class="st"> </span><span class="kw">svm</span>(<span class="dt">x =</span> train,<span class="dt">y =</span> <span class="kw">factor</span>(cl.train,<span class="dt">levels =</span> <span class="kw">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)),</a>
+<a class="sourceLine" id="cb5-53" title="53">                   <span class="dt">type=</span><span class="st">&quot;C-classification&quot;</span>,</a>
+<a class="sourceLine" id="cb5-54" title="54">                   <span class="dt">gamma=</span>rsvmfitTune<span class="op">$</span>best.parameters[<span class="dv">1</span>],<span class="dt">cost=</span>rsvmfitTune<span class="op">$</span>best.parameters[<span class="dv">2</span>])</a>
+<a class="sourceLine" id="cb5-55" title="55">    predrsvm &lt;-<span class="st"> </span><span class="kw">predict</span>(rsvmfit,<span class="dt">newdata =</span> test)</a>
+<a class="sourceLine" id="cb5-56" title="56">    testErr<span class="op">$</span>RSVM[R<span class="op">*</span>(noiselevel<span class="dv">-1</span>)<span class="op">+</span>i] &lt;-<span class="st"> </span><span class="kw">mean</span>(predrsvm<span class="op">!=</span><span class="kw">factor</span>(cl.test,<span class="dt">levels =</span> <span class="kw">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)))</a>
+<a class="sourceLine" id="cb5-57" title="57">  }</a>
+<a class="sourceLine" id="cb5-58" title="58">}</a></code></pre></div>
+<pre><code>## 1 2 3</code></pre>
+<p>We then reformat the test error of each method.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" title="1">testErr_reformat &lt;-<span class="st"> </span>tidyr<span class="op">::</span><span class="kw">gather</span>(testErr,<span class="dt">key =</span> <span class="st">&quot;method&quot;</span>,<span class="dt">value =</span> <span class="st">&quot;testError&quot;</span>,<span class="op">-</span>percentNoise)</a>
+<a class="sourceLine" id="cb7-2" title="2">testErr_reformat<span class="op">$</span>method &lt;-<span class="st"> </span><span class="kw">ordered</span>(testErr_reformat<span class="op">$</span>method, <span class="dt">levels=</span><span class="kw">c</span>(<span class="st">&quot;QC&quot;</span>,<span class="st">&quot;Ridge&quot;</span>,<span class="st">&quot;EQCRidge&quot;</span>,<span class="st">&quot;MC&quot;</span>,<span class="st">&quot;RSVM&quot;</span>))</a>
+<a class="sourceLine" id="cb7-3" title="3">testErr_reformat<span class="op">$</span>percentNoise &lt;-<span class="st"> </span><span class="kw">factor</span>(testErr_reformat<span class="op">$</span>percentNoise)</a>
+<a class="sourceLine" id="cb7-4" title="4"><span class="kw">library</span>(latex2exp) </a>
+<a class="sourceLine" id="cb7-5" title="5"><span class="kw">levels</span>(testErr_reformat<span class="op">$</span>percentNoise) &lt;-<span class="st">  </span><span class="kw">TeX</span>( <span class="kw">c</span>(<span class="st">&quot;$Noise = 0%$&quot;</span>,<span class="st">&quot;$Noise = 50%$&quot;</span>,<span class="st">&quot;$Noise = 90%$&quot;</span>) )</a>
+<a class="sourceLine" id="cb7-6" title="6"><span class="kw">head</span>(testErr_reformat)</a></code></pre></div>
+<pre><code>##                                            percentNoise method testError
+## 1  paste(&quot;&quot;, &quot;Noise&quot;, phantom() == phantom(), &quot;0%&quot;, &quot;&quot;)     QC    0.0685
+## 2  paste(&quot;&quot;, &quot;Noise&quot;, phantom() == phantom(), &quot;0%&quot;, &quot;&quot;)     QC    0.0886
+## 3  paste(&quot;&quot;, &quot;Noise&quot;, phantom() == phantom(), &quot;0%&quot;, &quot;&quot;)     QC    0.0537
+## 4 paste(&quot;&quot;, &quot;Noise&quot;, phantom() == phantom(), &quot;50%&quot;, &quot;&quot;)     QC    0.2593
+## 5 paste(&quot;&quot;, &quot;Noise&quot;, phantom() == phantom(), &quot;50%&quot;, &quot;&quot;)     QC    0.2509
+## 6 paste(&quot;&quot;, &quot;Noise&quot;, phantom() == phantom(), &quot;50%&quot;, &quot;&quot;)     QC    0.2656</code></pre>
+</div>
+<div id="visualization" class="section level2">
+<h2>Visualization</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" title="1"><span class="kw">library</span>(ggplot2)</a></code></pre></div>
+<pre><code>## 
+## 载入程辑包：&#39;ggplot2&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:NLP&#39;:
+## 
+##     annotate</code></pre>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" title="1"><span class="kw">ggplot</span>(testErr_reformat, <span class="dt">mapping=</span><span class="kw">aes</span>(<span class="dt">x=</span>method, <span class="dt">y=</span>testError)) <span class="op">+</span></a>
+<a class="sourceLine" id="cb12-2" title="2"><span class="st">  </span><span class="kw">geom_boxplot</span>(<span class="dt">outlier.alpha =</span> <span class="fl">0.5</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb12-3" title="3"><span class="st">  </span><span class="kw">geom_hline</span>(<span class="dt">yintercept =</span> <span class="dv">0</span>,<span class="dt">linetype=</span><span class="st">&quot;dashed&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb12-4" title="4"><span class="st">  </span><span class="kw">labs</span>(<span class="dt">x=</span><span class="st">&quot;Method&quot;</span>,<span class="dt">y=</span><span class="st">&quot;Relative error&quot;</span>)<span class="op">+</span></a>
+<a class="sourceLine" id="cb12-5" title="5"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position=</span><span class="st">&quot;top&quot;</span>,<span class="dt">text =</span> <span class="kw">element_text</span>(<span class="dt">size=</span><span class="dv">15</span>) )<span class="op">+</span></a>
+<a class="sourceLine" id="cb12-6" title="6"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">axis.text.x =</span> <span class="kw">element_text</span>(<span class="dt">angle =</span> <span class="dv">30</span>, <span class="dt">hjust =</span> <span class="dv">1</span>)) <span class="op">+</span></a>
+<a class="sourceLine" id="cb12-7" title="7"><span class="st">  </span><span class="kw">facet_grid</span>(<span class="op">~</span>percentNoise, <span class="dt">labeller =</span> label_parsed)</a></code></pre></div>
+<div class="figure">
+<img src="data:image/png;base64,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" alt="Boxplots of Test Errors of each Method" />
+<p class="caption">Boxplots of Test Errors of each Method</p>
+</div>
+</div>
+<div id="reference" class="section level2 unnumbered">
+<h2>Reference</h2>
+<div id="refs" class="references">
+<div id="ref-cortes1995support">
+<p>Cortes, Corinna, and Vladimir Vapnik. 1995. “Support-Vector Networks.” <em>Machine Learning</em> 20 (3): 273–97.</p>
+</div>
+<div id="ref-HALL2009">
+<p>Hall, Peter, D. M. Titterington, and Jing-Hao Xue. 2009. “Median-Based Classifiers for High-Dimensional Data.” <em>Journal of the American Statistical Association</em> 104 (488): 1597–1608. <a href="https://doi.org/10.1198/jasa.2009.tm08107">https://doi.org/10.1198/jasa.2009.tm08107</a>.</p>
+</div>
+<div id="ref-park2007penalized">
+<p>Park, Mee Young, and Trevor Hastie. 2007. “Penalized Logistic Regression for Detecting Gene Interactions.” <em>Biostatistics</em> 9 (1): 30–50.</p>
+</div>
+</div>
+</div>
+
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

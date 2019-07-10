@@ -1,0 +1,73 @@
+---
+output:
+  md_document:
+    variant: markdown_github
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-"
+)
+```
+
+# eqc
+
+It implements the ensemble quantile classifier (EQC) that extends the quantile-based classifier (Hennig and Viroli, 2016b).
+An accompanying vignette illustrates a simulation study and the application of
+the EQC compared to the other methods.
+
+## Installation
+
+To install this package, run
+
+```{r,eval=FALSE}
+if (!require("devtools")) install.packages("devtools")
+devtools::install_github("CliffordLai/eqc")
+```
+
+## Example
+
+This is a basic example which shows you how to train and tune the EQC.
+
+```{r example}
+library(eqc)
+# Divide data into training set and test set randomly
+data(wdbc)
+set.seed(193)
+trainIndex <- sample(c(rep(TRUE,2),rep(FALSE,1)),nrow(wdbc),replace=TRUE)
+train <- as.matrix(wdbc[trainIndex,-1])
+cl.train <- wdbc[trainIndex,1]
+test <- as.matrix(wdbc[!trainIndex,-1])
+cl.test <- wdbc[!trainIndex,1]
+p <- ncol(train)
+
+# Tuning parameters
+thetaList <- rbind(rep(0.3,p),rep(0.4,p),rep(0.5,p))
+# Fit the tuned EQC with a ridge logistic regression
+lambda <- c(3,1,0.1,0.01,0.001,0.0005,0.0001)
+fit <- eqcTrain(train,cl.train,
+                 thetaList=thetaList,
+                 method = "glmnet",
+                 alpha = 0,lambda = lambda,
+                 tuneControl = list(nfolds=5,fold.seed=117),
+                 lower.limits=0, upper.limits=Inf)
+fit$cvparameter #Selected tuning parameters
+acc <- mean(predict(fit,newdata = test,type = "class")[[1]]==cl.test)
+acc  #Classification accuracy
+
+```
+
+
+## Vignette
+
+The vignette include a simulation study and an application. 
+List vignettes in an HTML browser by,
+
+```{r,eval=FALSE}
+browseVignettes(package = "eqc")
+```
+

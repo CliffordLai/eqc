@@ -1,0 +1,17 @@
+Package: eqc
+Type: Package
+Title: Ensemble Quantile Classification
+Version: 1.2-1
+Date: 2019-07-07
+Author: Yuanhao Lai and A.I. McLeod
+Maintainer: Yuanhao Lai <ylai72@uwo.ca>
+Description: Performs the quantile-based transformation on numerical variables and construct an ensemble quantile classification model. It also provides a general function for applying classifications to the quantile-based transformed data.
+License: GPL (>= 2)
+Imports: e1071, glmnet, parallel, splitfngr, Rcpp, fields, rgl
+Encoding: UTF-8
+LazyData: true
+NeedsCompilation: yes
+Suggests: knitr, rmarkdown, latex2exp, ggplot2, tm, NLP, SnowballC, tidyr
+VignetteBuilder: knitr
+LinkingTo: Rcpp
+RoxygenNote: 6.1.1

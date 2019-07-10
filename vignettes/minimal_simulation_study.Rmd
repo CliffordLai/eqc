@@ -12,19 +12,13 @@ vignette: >
 
 This vignette introduces the functionality of the `eqc` package for 
 fitting the ensemble quantile classifier (EQC).
-As an example, a simulation study is done to compare the performance with regard to the relative error towards the quantile-based classifier (QC) of the following methods.
+As an example, a simulation study is done to compare the performance with regard to the test errors of the quantile-based classifier (QC) and the following methods.
 
 * Ridge: Ridge logistic regression [@park2007penalized];
 * EQC/Ridge: EQC fitted with the Ridge-type binomial loss;
 * MC: Median-based classifier [@HALL2009].
 * RSVM: SVM with radial kernel [@cortes1995support].
 
-The relative error is defined,
-\[
-\frac{\text{Err}_c-\text{Err}_\text{quantile}}{(\text{Err}_c+\text{Err}_\text{quantile})/2},
-\]
-where $\text{Err}_c$ and $\text{Err}_\text{quantile}$ are respectively the test error rate of 
-the compared classifier and the quantile-based classifier.
 Tuning parameters were selected by minimizing the 5-fold cross validation errors, 
 where the tuning set of $\theta$ is $\{0.02,0.04,\dotsc,0.98\}$,and
 the tuning set of the penalty parameter of the ridge regression is $\{3,1,0.1,0.01,0.001,0.0001\}$.
@@ -214,7 +208,7 @@ library(ggplot2)
 ggplot(testErr_reformat, mapping=aes(x=method, y=testError)) +
   geom_boxplot(outlier.alpha = 0.5) +
   geom_hline(yintercept = 0,linetype="dashed") +
-  labs(x="Method",y="Relative error")+
+  labs(x="Method",y="Test error")+
   theme(legend.position="top",text = element_text(size=15) )+
   theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   facet_grid(~percentNoise, labeller = label_parsed)

@@ -1,7 +1,7 @@
 inst/doc
 .Rproj.user
 *.Rproj
-trial
+trial/
 note
 achirved
 .Rbuildignore

@@ -16,6 +16,10 @@ To install this package, run
 ``` r
 if (!require("devtools")) install.packages("devtools")
 devtools::install_github("CliffordLai/eqc")
+
+# To include the vignette, one can use the following 
+# but it takes much more time to install the package
+devtools::install_github("CliffordLai/eqc",build_vignettes = TRUE)
 ```
 
 Example

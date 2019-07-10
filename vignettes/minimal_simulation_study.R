@@ -155,7 +155,7 @@ library(ggplot2)
 ggplot(testErr_reformat, mapping=aes(x=method, y=testError)) +
   geom_boxplot(outlier.alpha = 0.5) +
   geom_hline(yintercept = 0,linetype="dashed") +
-  labs(x="Method",y="Relative error")+
+  labs(x="Method",y="Test error")+
   theme(legend.position="top",text = element_text(size=15) )+
   theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   facet_grid(~percentNoise, labeller = label_parsed)

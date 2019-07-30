@@ -293,8 +293,8 @@ eqcTrain <- function(train,
     }
     tuneFun <- function(fold,...){
       cvfold <- foldid==fold
-      cvtrain <- train[!cvfold,]
-      cvtest <- train[cvfold,]
+      cvtrain <- train[!cvfold,,drop=FALSE]
+      cvtest <- train[cvfold,,drop=FALSE]
       cl.cvtrain <- cl.train[!cvfold]
       cl.cvtest <- cl.train[cvfold]
 

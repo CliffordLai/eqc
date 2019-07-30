@@ -1,8 +1,8 @@
 Package: eqc
 Type: Package
 Title: Ensemble Quantile Classification
-Version: 1.2-1
-Date: 2019-07-07
+Version: 1.2-2
+Date: 2019-07-27
 Author: Yuanhao Lai and A.I. McLeod
 Maintainer: Yuanhao Lai <ylai72@uwo.ca>
 Description: Performs the quantile-based transformation on numerical variables and construct an ensemble quantile classification model. It also provides a general function for applying classifications to the quantile-based transformed data.
